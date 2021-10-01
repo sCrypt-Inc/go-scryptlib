@@ -15,7 +15,6 @@ func TestTypesInt(t *testing.T) {
     hex, _ := intObj.Hex()
     assert.Equal(t, "00", hex)
 
-
     bigIntObj = big.NewInt(1)
     intObj = Int { value: bigIntObj }
     hex, _ = intObj.Hex()
@@ -25,7 +24,6 @@ func TestTypesInt(t *testing.T) {
     intObj = Int { value: bigIntObj }
     hex, _ = intObj.Hex()
     assert.Equal(t, "60", hex)
-
 
     bigIntObj = big.NewInt(17)
     intObj = Int { value: bigIntObj }

@@ -20,7 +20,9 @@ import (
 )
 
 // TODO: Close files without defer.
+// TODO: Don't use pointers with maps, as they themselves are reference types.
 
+var CURRENT_CONTRACT_DESCRIPTION_VERSION = 3
 
 var SOURCE_REGEXP = regexp.MustCompile(`^(?P<fileIndex>-?\d+):(?P<line>\d+):(?P<col>\d+):(?P<endLine>\d+):(?P<endCol>\d+)(#(?P<tagStr>.+))?`)
 var WARNING_REGEXP = regexp.MustCompile(`Warning:(\s|\n)*(?P<filePath>[^\s]+):(?P<line>\d+):(?P<column>\d+):(?P<line1>\d+):(?P<column1>\d+):*\n(?P<message>[^\n]+)\n`)
@@ -50,8 +52,9 @@ type CompilerResult struct {
 }
 
 func (compilerResult CompilerResult) ToDesc() map[string]interface{} {
-    var res map[string]interface{}
-    res["version"] = compilerResult.CompilerVersion
+    res := make(map[string]interface{})
+    res["version"] = CURRENT_CONTRACT_DESCRIPTION_VERSION
+    res["compilerVersion"] = compilerResult.CompilerVersion
     res["contract"] = compilerResult.Contract
     res["md5"] = compilerResult.SourceMD5
     res["structs"] = compilerResult.Structs
@@ -75,11 +78,14 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (map[string]interface{},
     }
 
     firstElem := output[0].(map[string]interface{})
-    if _, ok := firstElem["src"]; ok {
+    if _, ok := firstElem["src"]; ! ok {
         return nil, errors.New("Missing source map data in compiler results. Run compiler with debug flag.")
     }
 
-    sources := compilerResult.CompilerOutAsm["sources"].([]string)
+    var sources []string
+    for _, source := range compilerResult.CompilerOutAsm["sources"].([]interface{}) {
+        sources = append(sources, source.(string))
+    }
     sourcesFullpath, err := getSourcesFullpath(sources)
     if err != nil {
         return nil, err
@@ -143,7 +149,7 @@ type CompilerWrapper struct {
     ContractPath string
 }
 
-func (compilerWrapper CompilerWrapper) CompileContractFile(contractPath string) (CompilerResult, error) {
+func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string) (CompilerResult, error) {
     var res CompilerResult
 
     // Create outDir, if it doesn't exist yet.
@@ -207,7 +213,7 @@ func (compilerWrapper CompilerWrapper) CompileContractFile(contractPath string) 
         Abi: resultsAst.Abi,
         Warnings: warnings,
         CompilerVersion: compilerVersion,
-        Contract: sourceFilePrefix,
+        Contract: resultsAst.MainContractName,
         Structs: resultsAst.Structs,
         Aliases: resultsAst.Aliases,
         SourceFile: fmt.Sprintf("file://%s", contractPath),
@@ -255,11 +261,11 @@ func (compilerWrapper CompilerWrapper) CompileContractFile(contractPath string) 
     return res, nil
 }
 
-//func (compilerWrapper CompilerWrapper) CompileContractString(contractCode string) (CompilerResult, error) {
+//func (compilerWrapper *CompilerWrapper) CompileContractString(contractCode string) (CompilerResult, error) {
 //
 //}
 
-func (compilerWrapper CompilerWrapper) extractCompilerWarnings(compilerStdout string) ([]CompilerWarning, error) {
+func (compilerWrapper *CompilerWrapper) extractCompilerWarnings(compilerStdout string) ([]CompilerWarning, error) {
     var warnings []CompilerWarning
 
     matches := reSubMatchMapAll(WARNING_REGEXP, compilerStdout)
@@ -299,7 +305,7 @@ func (compilerWrapper CompilerWrapper) extractCompilerWarnings(compilerStdout st
     return warnings, nil
 }
 
-func (compilerWrapper CompilerWrapper) getSourceMD5(contractPath string) (string, error) {
+func (compilerWrapper *CompilerWrapper) getSourceMD5(contractPath string) (string, error) {
     fileContract, err := os.Open(contractPath)
     if err != nil {
         return "", err
@@ -322,7 +328,7 @@ func (compilerWrapper CompilerWrapper) getSourceMD5(contractPath string) (string
     return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func (compilerWrapper CompilerWrapper) GetCompilerVersion() (string, error) {
+func (compilerWrapper *CompilerWrapper) GetCompilerVersion() (string, error) {
     stdout, err := exec.Command(compilerWrapper.CompilerBin, "version").Output()
     if err != nil {
         return "", err
@@ -332,7 +338,7 @@ func (compilerWrapper CompilerWrapper) GetCompilerVersion() (string, error) {
     return tokens[1], nil
 }
 
-func (compilerWrapper CompilerWrapper) collectResultsAst(outPathAst string) (ResultsAst, error) {
+func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (ResultsAst, error) {
     var res ResultsAst
 
     fileAst, err := os.Open(outPathAst)
@@ -356,14 +362,10 @@ func (compilerWrapper CompilerWrapper) collectResultsAst(outPathAst string) (Res
 
     srcAstRoot := astTree[compilerWrapper.ContractPath].(map[string]interface{})
 
-    aliases := compilerWrapper.getAliases(&astTree)
-    fmt.Println(aliases)
-
+    aliasesDesc := compilerWrapper.getAliases(&astTree)
+    aliasMap := ConstructAliasMap(aliasesDesc)
     staticIntConsts := compilerWrapper.getStaticIntConstDeclarations(&astTree)
-    fmt.Println(staticIntConsts)
-
-    mainContractName, abi := compilerWrapper.getAbiDeclaration(&srcAstRoot, &aliases, &staticIntConsts)
-
+    mainContractName, abi := compilerWrapper.getAbiDeclaration(&srcAstRoot, aliasMap, &staticIntConsts)
     structs := compilerWrapper.getAstStructDeclarations(&astTree)
 
     delete(astTree, compilerWrapper.ContractPath)
@@ -372,14 +374,14 @@ func (compilerWrapper CompilerWrapper) collectResultsAst(outPathAst string) (Res
     return ResultsAst{
         Ast: srcAstRoot,
         DepAst: depAsts,
-        Aliases: aliases,
+        Aliases: aliasesDesc,
         Abi: abi,
         Structs: structs,
         MainContractName: mainContractName,
     }, nil
 }
 
-func (compilerWrapper CompilerWrapper) collectResultsAsm(outPathAsm string) (ResultsAsm, error) {
+func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (ResultsAsm, error) {
     var res ResultsAsm
 
     fileAsm, err := os.Open(outPathAsm)
@@ -401,7 +403,10 @@ func (compilerWrapper CompilerWrapper) collectResultsAsm(outPathAsm string) (Res
     var asmTree map[string]interface{}
     json.Unmarshal(contentAsm, &asmTree)
 
-    sources := asmTree["sources"].([]string)
+    var sources []string
+    for _, source := range asmTree["sources"].([]interface{}) {
+        sources = append(sources, source.(string))
+    }
     sourcesFullpath, err := getSourcesFullpath(sources)
     if err != nil {
         return res, err
@@ -436,8 +441,8 @@ func (compilerWrapper CompilerWrapper) collectResultsAsm(outPathAsm string) (Res
                 }
             }
 
-            var pos map[string]interface{}
-            if len(sources) > fileIdx {
+            pos := make(map[string]interface{})
+            if fileIdx != -1 && len(sources) > fileIdx {
                 pos["file"] = sourcesFullpath[fileIdx]
 
 
@@ -463,7 +468,7 @@ func (compilerWrapper CompilerWrapper) collectResultsAsm(outPathAsm string) (Res
                 pos["endColumn"] = endColumn
             }
 
-            var asmItem map[string]interface{}
+            asmItem := make(map[string]interface{})
             asmItem["opcode"] = output["opcode"]
             asmItem["hex"] = output["hex"]
             asmItem["stack"] = output["stack"]
@@ -547,8 +552,8 @@ func (compilerWrapper CompilerWrapper) collectResultsAsm(outPathAsm string) (Res
     }, nil
 }
 
-func (compilerWrapper CompilerWrapper) getAstStructDeclarations(astTree *map[string]interface{}) []map[string]interface{} {
-    var res []map[string]interface{}
+func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[string]interface{}) []map[string]interface{} {
+    res := make([]map[string]interface{}, 0)
 
     for _, srcElem := range *astTree {
         srcElem := srcElem.(map[string]interface{})
@@ -577,22 +582,22 @@ func (compilerWrapper CompilerWrapper) getAstStructDeclarations(astTree *map[str
     return res
 }
 
-func (compilerWrapper CompilerWrapper) getAliases(astTree *map[string]interface{}) []map[string]string {
-    var res []map[string]string
+func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface{}) []map[string]string {
+    res := make([]map[string]string, 0)
 
     for _, srcElem := range *astTree {
         srcElem := srcElem.(map[string]interface{})
 
         for _, aliasElem := range srcElem["alias"].([]interface{}) {
-            aliasElem := aliasElem.(map[string]string)
-            res = append(res, map[string]string{"name": aliasElem["alias"], "type": aliasElem["type"]})
+            aliasElem := aliasElem.(map[string]interface{})
+            res = append(res, map[string]string{"name": aliasElem["alias"].(string), "type": aliasElem["type"].(string)})
         }
     }
 
     return res
 }
 
-func (compilerWrapper CompilerWrapper) getStaticIntConstDeclarations(astTree *map[string]interface{}) map[string]*big.Int {
+func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *map[string]interface{}) map[string]*big.Int {
     var res map[string]*big.Int
 
     for _, srcElem := range *astTree {
@@ -624,8 +629,8 @@ func (compilerWrapper CompilerWrapper) getStaticIntConstDeclarations(astTree *ma
     return res
 }
 
-func (compilerWrapper CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string]interface{},
-                                                 aliases *[]map[string]string,
+func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string]interface{},
+                                                 aliases map[string]string,
                                                  staticIntConsts *map[string]*big.Int) (string, []map[string]interface{}) {
     contracts := (*srcAstRoot)["contracts"].([]interface{})
 
@@ -655,7 +660,7 @@ func (compilerWrapper CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string]
 }
 
 // Extract constructor declaration from the compiler produced AST.
-func (compilerWrapper CompilerWrapper) getConstructorDeclaration(contractTree *map[string]interface{}) map[string]interface{} {
+func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree *map[string]interface{}) map[string]interface{} {
     constructor := (*contractTree)["constructor"].(map[string]interface{})
     properties := (*contractTree)["properties"].([]interface{})
 
@@ -684,7 +689,7 @@ func (compilerWrapper CompilerWrapper) getConstructorDeclaration(contractTree *m
 
 
 // Extract public function declarations from the compiler produced AST.
-func (compilerWrapper CompilerWrapper) getPublicFunctionDeclarations(contractTree *map[string]interface{}) []map[string]interface{} {
+func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTree *map[string]interface{}) []map[string]interface{} {
     var res []map[string]interface{}
     pubFuncIdx := 0
 
@@ -727,9 +732,9 @@ func (compilerWrapper CompilerWrapper) getPublicFunctionDeclarations(contractTre
 
 // Resolve types of function parameters. 
 // This includes resolving type aliases and static integer constants in array parameter definitions.
-func (compilerWrapper CompilerWrapper) resolveAbiParamType(contractName string,
+func (compilerWrapper *CompilerWrapper) resolveAbiParamType(contractName string,
                                                            typeStr string,
-                                                           aliases *[]map[string]string,
+                                                           aliases map[string]string,
                                                            staticIntConsts *map[string]*big.Int) string {
 
     if IsArrayType(typeStr) {
@@ -741,7 +746,7 @@ func (compilerWrapper CompilerWrapper) resolveAbiParamType(contractName string,
 
 // Resolves array declaration string with static constants as sizes.
 // e.g. 'int[N][2]' -> 'int[5][2]'
-func (compilerWrapper CompilerWrapper) resolveArrayTypeStaticIntConsts(contractName string,
+func (compilerWrapper *CompilerWrapper) resolveArrayTypeStaticIntConsts(contractName string,
                                                                        typeStr string,
                                                                        staticIntConsts *map[string]*big.Int) string {
     typeName, arraySizes := FactorizeArrayTypeString(typeStr)
@@ -765,38 +770,38 @@ func (compilerWrapper CompilerWrapper) resolveArrayTypeStaticIntConsts(contractN
     return ToLiteralArrayTypeStr(typeName, sizes)
 }
 
-func (cocompilerWrapper CompilerWrapper) getSourceFilePrefix(contractPath string) string {
+func (cocompilerWrapper *CompilerWrapper) getSourceFilePrefix(contractPath string) string {
     base := filepath.Base(contractPath)
     return strings.Split(base, ".")[0]
 }
 
-func (compilerWrapper CompilerWrapper) assembleCompilerCommand(contractPathAbs string) string {
+func (compilerWrapper *CompilerWrapper) assembleCompilerCommand(contractPathAbs string) string {
     // Aseemble command for compiling the sCrypt contract file, passed via contractPathAbs.
     // TODO: Should this return a string or a slice with the command parts as elements?
     var cmdBuff strings.Builder
 
-    cmdBuff.WriteString(compilerWrapper.compilerBin)
+    cmdBuff.WriteString(compilerWrapper.CompilerBin)
     cmdBuff.WriteString(" compile ")
     cmdBuff.WriteString("--asm ")
     cmdBuff.WriteString("--ast ")
     cmdBuff.WriteString("--hex ")
 
-    if compilerWrapper.debug {
+    if compilerWrapper.Debug {
         cmdBuff.WriteString("--debug ")
     }
-    if compilerWrapper.stack {
+    if compilerWrapper.Stack {
         cmdBuff.WriteString("--stack ")
     }
-    if compilerWrapper.optimize {
+    if compilerWrapper.Optimize {
         cmdBuff.WriteString("--optimize ")
     }
     cmdBuff.WriteString("-r ")
     cmdBuff.WriteString("-o ")
-    absOutDir, _ := filepath.Abs(compilerWrapper.outDir)
+    absOutDir, _ := filepath.Abs(compilerWrapper.OutDir)
     cmdBuff.WriteString(absOutDir)
-    if compilerWrapper.cmdArgs != "" {
+    if compilerWrapper.CmdArgs != "" {
         cmdBuff.WriteString(" ")
-        cmdBuff.WriteString(compilerWrapper.cmdArgs)
+        cmdBuff.WriteString(compilerWrapper.CmdArgs)
     }
     if contractPathAbs != "" {
         cmdBuff.WriteString(" ")

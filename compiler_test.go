@@ -12,19 +12,28 @@ func TestCompiler0(t *testing.T) {
     if err != nil {
         log.Fatal(err)
     }
+
     compilerWrapper := CompilerWrapper {
-            compilerBin: compilerBin,
-            outDir: "./out",
-            hexOut: true,
-            debug: true,
-            stack: true,
-            optimize: false,
-            cmdArgs: "",
-            cwd: "./",
+            CompilerBin: compilerBin,
+            OutDir: "./out",
+            HexOut: true,
+            Debug: true,
+            Desc: true,
+            Stack: true,
+            Optimize: false,
+            CmdArgs: "",
+            Cwd: "./",
         }
-    _, err = compilerWrapper.CompileContractFile("./test/res/p2pkh.scrypt")
+
+    compilerResult, err := compilerWrapper.CompileContractFile("./test/res/p2pkh.scrypt")
     if err != nil {
         log.Fatal(err)
     }
+
+    _, err = compilerResult.ToDescWSourceMap()
+    if err != nil {
+        log.Fatal(err)
+    }
+
 
 }
