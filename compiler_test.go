@@ -3,15 +3,14 @@ package scryptlib
 
 import (
     "testing"
-    "log"
+
+    "github.com/stretchr/testify/assert"
 )
 
 
 func TestCompiler0(t *testing.T) {
     compilerBin, err := FindCompiler()
-    if err != nil {
-        log.Fatal(err)
-    }
+    assert.NoError(t, err)
 
     compilerWrapper := CompilerWrapper {
             CompilerBin: compilerBin,
@@ -26,14 +25,10 @@ func TestCompiler0(t *testing.T) {
         }
 
     compilerResult, err := compilerWrapper.CompileContractFile("./test/res/p2pkh.scrypt")
-    if err != nil {
-        log.Fatal(err)
-    }
+    assert.NoError(t, err)
 
     _, err = compilerResult.ToDescWSourceMap()
-    if err != nil {
-        log.Fatal(err)
-    }
+    assert.NoError(t, err)
 
 
 }

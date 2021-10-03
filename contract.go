@@ -5,7 +5,12 @@ import (
     "errors"
     "strconv"
     "reflect"
+    "strings"
     "math/big"
+
+    "github.com/libsv/go-bt/v2"
+    "github.com/libsv/go-bt/v2/bscript"
+    "github.com/libsv/go-bt/v2/bscript/interpreter"
 )
 
 
@@ -31,7 +36,7 @@ func (param *functionParam) setParamValue(value ScryptType) error {
 type publicFunction struct {
     FunctionName string
     Index        int
-    Params       []functionParam
+    Params       []functionParam    // TODO: Maybe make this a map, because order is set by the hex template.
 }
 
 type Contract struct {
@@ -135,9 +140,94 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 // Evaluate a public function call locally and return whether the evaluation was successfull,
 // meaning the public function call (unlocking script) successfully evaluated against the contract (lockingScript).
 // Constructor parameter values and also the public function parameter values MUST be set.
-func (contract *Contract) VerifyPublicFunction(functionName string) bool {
-    // TODO
-    return true
+func (contract *Contract) VerifyPublicFunction(functionName string) (bool, error) {
+    // TODO: Check if parameter vals haven't been set yet. Use flags.
+
+    lockingScript, err := contract.GetLockingScript()
+    if err != nil {
+        return false, err
+    }
+    unlockingScript, err := contract.GetUnlockingScript(functionName)
+    if err != nil {
+        return false, err
+    }
+
+    prevTxOut := bt.Output{
+        Satoshis: 0,
+        LockingScript: lockingScript,
+    }
+
+    tx := bt.NewTx()
+    err = tx.From(
+			"07912972e42095fe58daaf09161c5a5da57be47c2054dc2aaa52b30fefa1940b",
+			0,
+			lockingScript.String(),
+			0,
+		)
+    tx.Inputs[0].UnlockingScript = unlockingScript
+    if err != nil {
+        return false, err
+    }
+
+	if err := interpreter.NewEngine().Execute(interpreter.ExecutionParams{
+		Tx:            tx,
+		InputIdx:      0,
+		PreviousTxOut: &prevTxOut,
+        Flags:         interpreter.ScriptEnableSighashForkID | interpreter.ScriptUTXOAfterGenesis,
+	}); err != nil {
+        return false, err
+	}
+
+    return true, nil
+}
+
+func (contract *Contract) GetUnlockingScript(functionName string) (*bscript.Script, error) {
+    var res *bscript.Script
+    var sb strings.Builder
+
+    publicFunction := contract.publicFunctions[functionName]
+
+    for _, param := range publicFunction.Params {
+        paramHex, err := param.Value.Hex()
+        if err != nil {
+            return res, err
+        }
+        sb.WriteString(paramHex)
+    }
+
+    sb.WriteString("00")
+
+    unlockingScript, err := bscript.NewFromHexString(sb.String())
+    if err != nil {
+        return res, err
+    }
+
+    return unlockingScript, nil
+}
+
+func (contract *Contract) GetLockingScript() (*bscript.Script, error) {
+    var res *bscript.Script
+    lockingScriptHex := contract.lockingScriptHexTemplate
+
+    // TODO: move to code part
+    for _, param := range contract.constructorParams {
+        paramHex, err := param.Value.Hex()
+        if err != nil {
+            return res, err
+        }
+
+        toReplace := fmt.Sprintf("<%s>", param.Name)
+        lockingScriptHex = strings.Replace(lockingScriptHex, toReplace, paramHex, 1)
+    }
+
+    // TODO: Data part.
+
+    lockingScript, err := bscript.NewFromHexString(lockingScriptHex)
+    if err != nil {
+        return res, err
+    }
+
+    return lockingScript, nil
 }
 
 // Returns a map, that maps struct names as defined in the contract to their respective instances of ScryptType.

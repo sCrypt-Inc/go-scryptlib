@@ -6,7 +6,7 @@ import (
     "strings"
     "math/big"
 
-    "github.com/libsv/go-bt/bscript"
+    "github.com/libsv/go-bt/v2/bscript"
     "github.com/libsv/go-bk/bec"
 )
 
@@ -71,7 +71,7 @@ func (intType Int) Hex() (string, error) {
             b = append(b, 0x00)
         }
     }
-    pushDataPrefix, err := bscript.GetPushDataPrefix(b)
+    pushDataPrefix, err := bscript.PushDataPrefix(b)
     if err != nil {
         return "", err
     }
@@ -103,7 +103,7 @@ type Bytes struct {
 }
 
 func (bytesType Bytes) Hex() (string, error) {
-    pushDataPrefix, err := bscript.GetPushDataPrefix(bytesType.value)
+    pushDataPrefix, err := bscript.PushDataPrefix(bytesType.value)
     if err != nil {
         return "", err
     }
