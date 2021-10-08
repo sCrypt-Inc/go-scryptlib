@@ -481,16 +481,16 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
     var autoTypedVars []map[string]interface{}
     if compilerWrapper.Debug {
         for _, item := range asmTree["autoTypedVars"].([]interface{}) {
-            item := item.(map[string]string)
+            item := item.(map[string]interface{})
 
-            match := reSubMatchMap(SOURCE_REGEXP, item["src"])
+            match := reSubMatchMap(SOURCE_REGEXP, item["src"].(string))
             if len(match) > 0 {
                 fileIdx, err := strconv.Atoi(match["fileIndex"])
                 if err != nil {
                     return res, err
                 }
 
-                var pos map[string]interface{}
+                pos := make(map[string]interface{})
                 if len(sources) > fileIdx {
                     s := sources[fileIdx]
 
@@ -598,7 +598,7 @@ func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface
 }
 
 func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *map[string]interface{}) map[string]*big.Int {
-    var res map[string]*big.Int
+    res := make(map[string]*big.Int)
 
     for _, srcElem := range *astTree {
         srcElem := srcElem.(map[string]interface{})
@@ -611,13 +611,13 @@ func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *m
                 staticElem := staticElem.(map[string]interface{})
 
                 isConst := staticElem["const"].(bool)
-                exprElem := staticElem["expr"].(map[string]string)
-                if ! isConst || exprElem["nodeType"] != "IntLiteral" {
+                exprElem := staticElem["expr"].(map[string]interface{})
+                if ! isConst || exprElem["nodeType"].(string) != "IntLiteral" {
                     continue
                 }
 
                 key := fmt.Sprintf("%s.%s", contractName, staticElem["name"].(string))
-                valueString := exprElem["value"]
+                valueString := fmt.Sprintf("%f", exprElem["value"].(float64))
                 value := new(big.Int)
                 value, _ = value.SetString(valueString, 10)
 
@@ -645,6 +645,9 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
     declarations := compilerWrapper.getPublicFunctionDeclarations(&mainContract)
     declarations = append(declarations, constructor)
     for _, declaration := range declarations {
+        if declaration["params"] == nil {
+            continue
+        }
         params := declaration["params"].([]map[string]string)
         for _, param := range params {
             resolvedParamType := compilerWrapper.resolveAbiParamType(mainContractName,
@@ -661,6 +664,9 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
 
 // Extract constructor declaration from the compiler produced AST.
 func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree *map[string]interface{}) map[string]interface{} {
+    if (*contractTree)["constructor"] == nil {
+        return nil
+    }
     constructor := (*contractTree)["constructor"].(map[string]interface{})
     properties := (*contractTree)["properties"].([]interface{})
 
