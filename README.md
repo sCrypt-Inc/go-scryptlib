@@ -78,7 +78,7 @@ fmt.Println(contractDemo.GetUnlockingScript("add"))
 
 We can then localy check, if a public function calls successfully evaluates.
 ```go
-success, err := contractDemo.VerifyPublicFunction("add")
+success, err := contractDemo.EvaluatePublicFunction("add")
 ```
 
 The above method call will use the parameter values, that we set in the previous steps.
