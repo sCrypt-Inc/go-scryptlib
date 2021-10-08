@@ -819,9 +819,9 @@ func FindCompiler() (string, error) {
     if runtime.GOOS == "linux" {
         pathSuffix = "compiler/scryptc/linux/scryptc"
     } else if runtime.GOOS == "windows" {
-        pathSuffix = "compiler/scryptc/mac/scryptc"
-    } else if runtime.GOOS == "darwin" {
         pathSuffix = "compiler/scryptc/win32/scryptc.exe"
+    } else if runtime.GOOS == "darwin" {
+        pathSuffix = "compiler/scryptc/mac/scryptc"
     }
 
     compiler = searchKnownCompilerLocations(pathSuffix)
