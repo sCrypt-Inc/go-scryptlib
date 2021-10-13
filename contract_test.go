@@ -2,17 +2,21 @@ package scryptlib
 
 
 import (
+    "os"
     "testing"
     "math/big"
 
     "github.com/stretchr/testify/assert"
 )
 
-func TestContractParamCheck(t *testing.T) {
-    compilerBin, err := FindCompiler()
-    assert.NoError(t, err)
 
-    compilerWrapper := CompilerWrapper {
+var compilerWrapper CompilerWrapper
+var contractDemo Contract
+
+func TestMain(m *testing.M) {
+    compilerBin, _ := FindCompiler()
+
+    compilerWrapper = CompilerWrapper {
             CompilerBin: compilerBin,
             OutDir: "./out",
             HexOut: true,
@@ -24,15 +28,14 @@ func TestContractParamCheck(t *testing.T) {
             Cwd: "./",
         }
 
-    compilerResult, err := compilerWrapper.CompileContractFile("./test/res/demo.scrypt")
-    assert.NoError(t, err)
+    compilerResult, _ := compilerWrapper.CompileContractFile("./test/res/demo.scrypt")
+    desc, _ := compilerResult.ToDescWSourceMap()
+    contractDemo, _ = NewContractFromDesc(desc)
 
-    desc, err := compilerResult.ToDescWSourceMap()
-    assert.NoError(t, err)
+    os.Exit(m.Run())
+}
 
-    contractDemo, err := NewContractFromDesc(desc)
-    assert.NoError(t, err)
-
+func TestContractEval(t *testing.T) {
     x := Int{big.NewInt(7)}
     y := Int{big.NewInt(4)}
     constructorParams := map[string]ScryptType {
@@ -40,9 +43,10 @@ func TestContractParamCheck(t *testing.T) {
         "y": y,
     }
 
-    err = contractDemo.SetConstructorParams(constructorParams)
+    err := contractDemo.SetConstructorParams(constructorParams)
     assert.NoError(t, err)
 
+    // Correct sum:
     sumCorrect := Int{big.NewInt(11)}
     addParams := map[string]ScryptType {
         "z": sumCorrect,
@@ -50,8 +54,22 @@ func TestContractParamCheck(t *testing.T) {
     err = contractDemo.SetPublicFunctionParams("add", addParams)
     assert.NoError(t, err)
 
-    success, err := contractDemo.VerifyPublicFunction("add")
+    success, err := contractDemo.EvaluatePublicFunction("add")
     assert.NoError(t, err)
     assert.Equal(t, true, success)
 
+    // Incorect sum:
+    sumIncorrect := Int{big.NewInt(-23)}
+    addParams = map[string]ScryptType {
+        "z": sumIncorrect,
+    }
+    err = contractDemo.SetPublicFunctionParams("add", addParams)
+    assert.NoError(t, err)
+    success, err = contractDemo.EvaluatePublicFunction("add")
+    assert.Error(t, err)
+    assert.Equal(t, false, success)
+}
+
+func TestContractParamCheck(t *testing.T) {
+    // TODO
 }

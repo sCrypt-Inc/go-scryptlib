@@ -11,6 +11,7 @@ import (
     "github.com/libsv/go-bt/v2"
     "github.com/libsv/go-bt/v2/bscript"
     "github.com/libsv/go-bt/v2/bscript/interpreter"
+    "github.com/libsv/go-bt/v2/bscript/interpreter/scriptflag"
 )
 
 
@@ -39,12 +40,20 @@ type publicFunction struct {
     Params       []functionParam    // TODO: Maybe make this a map, because order is set by the hex template.
 }
 
+type ExecutionContext struct {
+	Tx              *bt.Tx
+	InputIdx        int
+	Flags           scriptflag.Flag
+}
+
 type Contract struct {
     lockingScriptHexTemplate  string
     aliases                   map[string]string
     constructorParams         []functionParam
     publicFunctions           map[string]publicFunction
     structTypes               map[string]Struct             // Templates of contracts struct types. Maps struct names to related templates.
+    executionContext          ExecutionContext
+    contextSet                bool
 }
 
 // Set values for the contracts constructors parameters. 
@@ -137,10 +146,23 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
     return nil
 }
 
+// Returns if the contracts execution context was already set at least once.
+func (contract *Contract) IsExecutionContextSet() bool {
+    return contract.contextSet
+}
+
+// Set the execution context, that will be used while evaluating a contracts public function.
+// The locking and unlocking scripts, that you wan't to evaluate can be just templates, as they will be substitued localy, 
+// while calling the EvaluatePublicFunction method.
+func (contract *Contract) SetExecutionContext(ec ExecutionContext) {
+    contract.executionContext = ec
+    contract.contextSet = true
+}
+
 // Evaluate a public function call locally and return whether the evaluation was successfull,
 // meaning the public function call (unlocking script) successfully evaluated against the contract (lockingScript).
 // Constructor parameter values and also the public function parameter values MUST be set.
-func (contract *Contract) VerifyPublicFunction(functionName string) (bool, error) {
+func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, error) {
     // TODO: Check if parameter vals haven't been set yet. Use flags.
 
     lockingScript, err := contract.GetLockingScript()
@@ -152,31 +174,39 @@ func (contract *Contract) VerifyPublicFunction(functionName string) (bool, error
         return false, err
     }
 
-    prevTxOut := bt.Output{
-        Satoshis: 0,
-        LockingScript: lockingScript,
-    }
+    if ! contract.contextSet {
+        err = interpreter.NewEngine().Execute(interpreter.WithScripts(lockingScript, unlockingScript))
+        if err != nil {
+            return false, err
+        }
+    } else {
+        //input := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx)
+        //if input == nil {
+        //    return false, errors.New(fmt.Sprintf("Context transaction has no input with index %d.", contract.executionContext.InputIdx))
+        //}
+        contract.executionContext.Tx.Inputs[contract.executionContext.InputIdx].UnlockingScript = unlockingScript
+        prevoutSats := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxSatoshis
 
-    tx := bt.NewTx()
-    err = tx.From(
-			"07912972e42095fe58daaf09161c5a5da57be47c2054dc2aaa52b30fefa1940b",
-			0,
-			lockingScript.String(),
-			0,
-		)
-    tx.Inputs[0].UnlockingScript = unlockingScript
-    if err != nil {
-        return false, err
+        engine := interpreter.NewEngine()
+        err = engine.Execute(
+            //interpreter.WithScripts(
+            //    lockingScript,
+            //    unlockingScript,
+            //),
+            interpreter.WithTx(
+                contract.executionContext.Tx,
+                contract.executionContext.InputIdx,
+                //contract.executionContext.PreviousTxOut,
+                &bt.Output{LockingScript: lockingScript, Satoshis: prevoutSats},
+            ),
+            interpreter.WithFlags(
+                contract.executionContext.Flags,
+            ),
+        )
+        if err != nil {
+            return false, err
+        }
     }
-
-	if err := interpreter.NewEngine().Execute(interpreter.ExecutionParams{
-		Tx:            tx,
-		InputIdx:      0,
-		PreviousTxOut: &prevTxOut,
-        Flags:         interpreter.ScriptEnableSighashForkID | interpreter.ScriptUTXOAfterGenesis,
-	}); err != nil {
-        return false, err
-	}
 
     return true, nil
 }
@@ -195,7 +225,13 @@ func (contract *Contract) GetUnlockingScript(functionName string) (*bscript.Scri
         sb.WriteString(paramHex)
     }
 
-    sb.WriteString("00")
+    // Append public function index.
+    index := Int{big.NewInt(int64(publicFunction.Index))}
+    indexHex, err := index.Hex()
+    if err != nil {
+        return res, err
+    }
+    sb.WriteString(indexHex)
 
     unlockingScript, err := bscript.NewFromHexString(sb.String())
     if err != nil {
@@ -428,7 +464,7 @@ func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
     case "PubKey":
         res = PubKey{nil}
     case "Sig":
-        res = Sig{nil}
+        res = Sig{nil, 0}
     case "Ripemd160":
         res = Ripemd160{make([]byte, 0)}
     case "Sha1":
@@ -480,6 +516,7 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
         constructorParams: constructorParams,
         publicFunctions: publicFunctions,
         structTypes: structTypes,
+        contextSet: false,
     }, nil
 }
 

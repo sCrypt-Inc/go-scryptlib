@@ -617,7 +617,7 @@ func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *m
                 }
 
                 key := fmt.Sprintf("%s.%s", contractName, staticElem["name"].(string))
-                valueString := fmt.Sprintf("%f", exprElem["value"].(float64))
+                valueString := fmt.Sprintf("%f", exprElem["value"].(float64))   // TODO: What if huge integer?
                 value := new(big.Int)
                 value, _ = value.SetString(valueString, 10)
 

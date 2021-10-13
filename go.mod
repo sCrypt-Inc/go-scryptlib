@@ -1,10 +1,10 @@
-module github.com/kala-tech/go-scryptlib
+module github.com/sCrypt-Inc/go-scryptlib
 
 go 1.17
 
 require (
 	github.com/libsv/go-bk v0.1.4
-	github.com/libsv/go-bt/v2 v2.0.0-beta.7
+	github.com/libsv/go-bt/v2 v2.0.0-beta.8
 	github.com/stretchr/testify v1.7.0
 )
 
