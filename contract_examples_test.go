@@ -9,8 +9,8 @@ import (
 
     "github.com/stretchr/testify/assert"
 
-    "github.com/libsv/go-bk/bip32"
-	"github.com/libsv/go-bk/crypto"
+    "github.com/libsv/go-bk/crypto"
+    "github.com/libsv/go-bk/wif"
     "github.com/libsv/go-bt/v2"
     "github.com/libsv/go-bt/v2/sighash"
     "github.com/libsv/go-bt/v2/bscript/interpreter/scriptflag"
@@ -70,12 +70,10 @@ func TestContractP2PKH(t *testing.T) {
     contractP2PKH, err := NewContractFromDesc(desc)
     assert.NoError(t, err)
 
-    privKeyBase58 := "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
-    priv, err := bip32.NewKeyFromString(privKeyBase58)
+    wif_key, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
     assert.NoError(t, err)
-	pub, err := priv.ECPubKey()
-    assert.NoError(t, err)
-    addr := crypto.Hash160(pub.SerialiseCompressed())
+    priv := wif_key.PrivKey
+    addr := crypto.Hash160(wif_key.SerialisePubKey())
 
     pubKeyHash := Ripemd160{addr}
     constructorParams := map[string]ScryptType {
@@ -91,15 +89,14 @@ func TestContractP2PKH(t *testing.T) {
     assert.NoError(t, err)
     lockingScriptHex := hex.EncodeToString(*lockingScript)
     err = tx.From(
-        "07912972e42095fe58daaf09161c5a5da57be47c2054dc2aaa52b30fefa1940b", // Random TXID
+        "a3865bd4351665c7531a4311f250c1eac5d6775da5ced72b4b83cfee625b6947", // Random TXID
         0,
         lockingScriptHex,
         5000)
     assert.NoError(t, err)
 
-    ecPrivKey, err := priv.ECPrivKey()
     assert.NoError(t, err)
-    localSigner := bt.LocalSigner{ecPrivKey}
+    localSigner := bt.LocalSigner{priv}
 
     var shf sighash.Flag = sighash.AllForkID
     _, sigBytes, err := localSigner.Sign(context.Background(), tx, 0, shf)
@@ -109,7 +106,7 @@ func TestContractP2PKH(t *testing.T) {
 
     unlockParams := map[string]ScryptType {
         "sig": sig,
-        "pubKey": PubKey{pub},
+        "pubKey": PubKey{priv.PubKey()},
     }
     err = contractP2PKH.SetPublicFunctionParams("unlock", unlockParams)
     assert.NoError(t, err)

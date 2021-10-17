@@ -191,7 +191,7 @@ func (pubKeyType PubKey) Hex() (string, error) {
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
     var res []byte
-    b := pubKeyType.value.SerialiseCompressed()
+    b := pubKeyType.value.SerialiseUncompressed()
     pushDataPrefix, err := bscript.PushDataPrefix(b)
     if err != nil {
         return res, err

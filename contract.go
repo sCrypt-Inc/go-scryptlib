@@ -226,12 +226,14 @@ func (contract *Contract) GetUnlockingScript(functionName string) (*bscript.Scri
     }
 
     // Append public function index.
-    index := Int{big.NewInt(int64(publicFunction.Index))}
-    indexHex, err := index.Hex()
-    if err != nil {
-        return res, err
+    if len(contract.publicFunctions) > 1 {
+        index := Int{big.NewInt(int64(publicFunction.Index))}
+        indexHex, err := index.Hex()
+        if err != nil {
+            return res, err
+        }
+        sb.WriteString(indexHex)
     }
-    sb.WriteString(indexHex)
 
     unlockingScript, err := bscript.NewFromHexString(sb.String())
     if err != nil {
