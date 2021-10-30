@@ -171,7 +171,7 @@ func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string)
 
     // Run the assembled command.
     compilerCmdParts := strings.Split(compilerCmd, " ")
-    compilerStdout, err := exec.Command(compilerCmdParts[0], compilerCmdParts[1:]...).Output()
+    compilerStdout, err := exec.Command(compilerCmdParts[0], compilerCmdParts[1:]...).CombinedOutput()
     if err != nil {
         return res, err
     }
@@ -640,18 +640,20 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
     mainContract := contracts[len(contracts) - 1].(map[string]interface{})
 
     mainContractName := mainContract["name"].(string)
-    constructor := compilerWrapper.getConstructorDeclaration(&mainContract)
+    constructor := compilerWrapper.getConstructorDeclaration(mainContract)
 
-    declarations := compilerWrapper.getPublicFunctionDeclarations(&mainContract)
-    declarations = append(declarations, constructor)
+    declarations := compilerWrapper.getPublicFunctionDeclarations(mainContract)
+    if constructor != nil {
+        declarations = append(declarations, constructor)
+    }
     for _, declaration := range declarations {
         if declaration["params"] == nil {
             continue
         }
-        params := declaration["params"].([]map[string]string)
+        params := declaration["params"].([]map[string]interface{})
         for _, param := range params {
             resolvedParamType := compilerWrapper.resolveAbiParamType(mainContractName,
-                                                         param["type"],
+                                                         param["type"].(string),
                                                          aliases,
                                                          staticIntConsts)
             param["type"] = resolvedParamType
@@ -663,27 +665,28 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
 }
 
 // Extract constructor declaration from the compiler produced AST.
-func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree *map[string]interface{}) map[string]interface{} {
-    if (*contractTree)["constructor"] == nil {
-        return nil
-    }
-    constructor := (*contractTree)["constructor"].(map[string]interface{})
-    properties := (*contractTree)["properties"].([]interface{})
+func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree map[string]interface{}) map[string]interface{} {
+    var params []map[string]interface{}
 
-    var params []map[string]string
-    if constructor != nil {
+    if contractTree["constructor"] != nil {
+        // Explicit constructor.
+        constructor := contractTree["constructor"].(map[string]interface{})
         for _, param := range constructor["params"].([]interface{}) {
             param := param.(map[string]interface{})
             pName := param["name"].(string)
             pType := param["type"].(string)
-            params = append(params, map[string]string{"name": pName, "type": pType})
+            pState := false
+            params = append(params, map[string]interface{}{"name": pName, "type": pType, "state": pState})
         }
-    } else if properties != nil {
+    } else if contractTree["properties"] != nil {
+        // Implicit constructor.
+        properties := contractTree["properties"].([]interface{})
         for _, prop := range properties {
             prop := prop.(map[string]interface{})
             pName := strings.ReplaceAll(prop["name"].(string), "this.", "")
             pType := prop["type"].(string)
-            params = append(params, map[string]string{"name": pName, "type": pType})
+            pState := prop["state"].(bool)
+            params = append(params, map[string]interface{}{"name": pName, "type": pType, "state": pState})
         }
     }
 
@@ -695,11 +698,11 @@ func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree *
 
 
 // Extract public function declarations from the compiler produced AST.
-func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTree *map[string]interface{}) []map[string]interface{} {
+func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTree map[string]interface{}) []map[string]interface{} {
     var res []map[string]interface{}
     pubFuncIdx := 0
 
-    functions := (*contractTree)["functions"].([]interface{})
+    functions := contractTree["functions"].([]interface{})
     for _, function := range functions {
         function := function.(map[string]interface{})
         visibility := function["visibility"].(string)
@@ -714,12 +717,12 @@ func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTr
                 pubFuncIdx += 1
             }
 
-            var params []map[string]string
+            var params []map[string]interface{}
             for _, param := range function["params"].([]interface{}) {
                 param := param.(map[string]interface{})
                 pName := param["name"].(string)
                 pType := param["type"].(string)
-                params = append(params, map[string]string{"name": pName, "type": pType})
+                params = append(params, map[string]interface{}{"name": pName, "type": pType})
             }
 
             abiEntity := make(map[string]interface{})

@@ -7,6 +7,8 @@ import (
     "strconv"
     "reflect"
     "math/big"
+
+    "github.com/libsv/go-bt/v2/bscript"
 )
 
 
@@ -191,6 +193,13 @@ func ConstructAliasMap(aliasesDesc []map[string]string) map[string]string {
     return aliases
 }
 
+func CompareScryptVariableTypes(a ScryptType, b ScryptType) bool {
+        typePlaceholder := reflect.TypeOf(a).Name()
+        typeActualParam := reflect.TypeOf(b).Name()
+
+        return typePlaceholder == typeActualParam
+}
+
 func reSubMatchMap(r *regexp.Regexp, str string) map[string]string {
     match := r.FindStringSubmatch(str)
     subMatchMap := make(map[string]string)
@@ -218,5 +227,16 @@ func reSubMatchMapAll(r *regexp.Regexp, str string) []map[string]string {
     }
 
     return res
+}
+
+func appendPushdataPrefix(buffer []byte) ([]byte, error) {
+    var res []byte
+
+    pushDataPrefix, err := bscript.PushDataPrefix(buffer)
+    if err != nil {
+        return res, err
+    }
+
+    return append(pushDataPrefix, buffer...), nil
 }
 

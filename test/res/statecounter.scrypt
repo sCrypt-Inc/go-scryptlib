@@ -1,0 +1,15 @@
+import "util.scrypt";
+contract StateCounter {
+
+    @state
+    int counter;
+
+    public function unlock(SigHashPreimage txPreimage, int amount) {
+        require(Tx.checkPreimage(txPreimage));
+        // increment counter
+        this.counter++;
+        bytes outputScript = this.getStateScript();
+        bytes output = Util.buildOutput(outputScript, amount);
+        require(hash256(output) == Util.hashOutputs(txPreimage));
+    }
+}

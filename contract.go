@@ -7,6 +7,7 @@ import (
     "reflect"
     "strings"
     "math/big"
+    "encoding/binary"
 
     "github.com/libsv/go-bt/v2"
     "github.com/libsv/go-bt/v2/bscript"
@@ -19,6 +20,7 @@ type functionParam struct {
     Name        string
     TypeString  string
     Value       ScryptType
+    IsState     bool
 }
 
 func (param *functionParam) setParamValue(value ScryptType) error {
@@ -165,43 +167,40 @@ func (contract *Contract) SetExecutionContext(ec ExecutionContext) {
 func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, error) {
     // TODO: Check if parameter vals haven't been set yet. Use flags.
 
-    lockingScript, err := contract.GetLockingScript()
-    if err != nil {
-        return false, err
-    }
     unlockingScript, err := contract.GetUnlockingScript(functionName)
     if err != nil {
         return false, err
     }
 
     if ! contract.contextSet {
-        err = interpreter.NewEngine().Execute(interpreter.WithScripts(lockingScript, unlockingScript))
+        lockingScript, err := contract.GetLockingScript()
+        if err != nil {
+            return false, err
+        }
+        err = interpreter.NewEngine().Execute(
+            interpreter.WithScripts(lockingScript, unlockingScript),
+            interpreter.WithAfterGenesis(),
+        )
+
         if err != nil {
             return false, err
         }
     } else {
-        //input := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx)
-        //if input == nil {
-        //    return false, errors.New(fmt.Sprintf("Context transaction has no input with index %d.", contract.executionContext.InputIdx))
-        //}
         contract.executionContext.Tx.Inputs[contract.executionContext.InputIdx].UnlockingScript = unlockingScript
         prevoutSats := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxSatoshis
+        prevLockingScript := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxScript
 
         engine := interpreter.NewEngine()
         err = engine.Execute(
-            //interpreter.WithScripts(
-            //    lockingScript,
-            //    unlockingScript,
-            //),
             interpreter.WithTx(
                 contract.executionContext.Tx,
                 contract.executionContext.InputIdx,
-                //contract.executionContext.PreviousTxOut,
-                &bt.Output{LockingScript: lockingScript, Satoshis: prevoutSats},
+                &bt.Output{LockingScript: prevLockingScript, Satoshis: prevoutSats},
             ),
             interpreter.WithFlags(
                 contract.executionContext.Flags,
             ),
+            interpreter.WithAfterGenesis(),
         )
         if err != nil {
             return false, err
@@ -245,27 +244,109 @@ func (contract *Contract) GetUnlockingScript(functionName string) (*bscript.Scri
 
 func (contract *Contract) GetLockingScript() (*bscript.Script, error) {
     var res *bscript.Script
+
+    codePart, err := contract.GetCodePart()
+    if err != nil {
+        return res, err
+    }
+
+    dataPart, err := contract.GetDataPart()
+    if err != nil {
+        return res, err
+    }
+
+    if dataPart != "" {
+        // Code and data part are seperated by OP_RETURN.
+        res, err = bscript.NewFromHexString(codePart + "6a" + dataPart)
+    } else {
+        res, err = bscript.NewFromHexString(codePart)
+    }
+    if err != nil {
+        return res, err
+    }
+
+    return res, nil
+}
+
+func (contract *Contract) GetCodePart() (string, error) {
+    var res string
+
     lockingScriptHex := contract.lockingScriptHexTemplate
 
-    // TODO: move to code part
+    lockingScriptHex = strings.Replace(lockingScriptHex, "<__codePart__>", "00", 1)
+
     for _, param := range contract.constructorParams {
-        paramHex, err := param.Value.Hex()
-        if err != nil {
-            return res, err
+        // If this parameter is part of the contracts state, then we only have to substitute the placeholder with an arbitrary
+        // value. This value gets replaced by the actual vale in the state part of the script during a contract call evaluation.
+        paramHex := "00"
+        if ! param.IsState {
+            hexVal, err := param.Value.Hex()
+            if err != nil {
+                return res, err
+            }
+            paramHex = hexVal
         }
 
         toReplace := fmt.Sprintf("<%s>", param.Name)
         lockingScriptHex = strings.Replace(lockingScriptHex, toReplace, paramHex, 1)
     }
 
-    // TODO: Data part.
+    return lockingScriptHex, nil
+}
 
-    lockingScript, err := bscript.NewFromHexString(lockingScriptHex)
-    if err != nil {
-        return res, err
+func (contract *Contract) GetDataPart() (string, error) {
+    var res string
+
+    contractStateVersion := 0
+
+    var sb strings.Builder
+    for _, param := range contract.constructorParams {
+        if ! param.IsState {
+            continue
+        }
+
+        paramHex, err := param.Value.StateHex()
+        if err != nil {
+            return res, err
+        }
+
+        sb.WriteString(paramHex)
     }
 
-    return lockingScript, nil
+    sbLen := uint32(sb.Len() / 2)
+    if sbLen > 0 {
+        sizeLE := make([]byte, 4)
+        binary.LittleEndian.PutUint32(sizeLE, sbLen)
+        sb.WriteString(fmt.Sprintf("%x", sizeLE))
+
+        sb.WriteString(fmt.Sprintf("%02x", contractStateVersion))
+    }
+
+    return sb.String(), nil
+}
+
+func (contract *Contract) UpdateStateVariable(variableName string, value ScryptType) error {
+    // TODO: Make state variable lookup with a map instead of going through all constructor params.
+    for i := range contract.constructorParams {
+        param := &contract.constructorParams[i]
+
+        if param.Name != variableName {
+            continue
+        }
+
+        if ! param.IsState {
+            return errors.New(fmt.Sprintf("\"%s\" is not a state variable.", variableName))
+        }
+
+        if ! CompareScryptVariableTypes(param.Value, value) {
+            return errors.New(fmt.Sprintf("Variable \"%s\" value must be of type %T. Actual type is %T.", variableName, param.Value, value))
+        }
+
+        param.Value = value
+        return nil
+    }
+
+    return errors.New(fmt.Sprintf("No variable named \"%s\".", variableName))
 }
 
 // Returns a map, that maps struct names as defined in the contract to their respective instances of ScryptType.
@@ -284,7 +365,7 @@ func constructAbiPlaceholders(desc map[string]interface{}, structTypes map[strin
     for _, abiItem := range desc["abi"].([]map[string]interface{}) {
 
         abiItemType := abiItem["type"].(string)
-        params := abiItem["params"].([]map[string]string)
+        params := abiItem["params"].([]map[string]interface{})
 
         var publicFunctionPlaceholder publicFunction
         var publicFunctionName string
@@ -298,8 +379,8 @@ func constructAbiPlaceholders(desc map[string]interface{}, structTypes map[strin
 
         for _, param := range params {
             var value ScryptType
-            pName := param["name"]
-            pType := param["type"]
+            pName := param["name"].(string)
+            pType := param["type"].(string)
 
             if IsStructType(pType) {
                 // Create copy of struct template.
@@ -328,6 +409,7 @@ func constructAbiPlaceholders(desc map[string]interface{}, structTypes map[strin
             }
 
             if abiItemType == "constructor" {
+                placeholder.IsState = param["state"].(bool)
                 constructorParams = append(constructorParams, placeholder)
             } else {
                 publicFunctionPlaceholder.Params = append(publicFunctionPlaceholder.Params, placeholder)

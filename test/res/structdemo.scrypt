@@ -10,7 +10,7 @@ struct Person {
     Age age;
 }
 
-type Female = Person;
+type FeMale = Person;
 type Male = Person;
 
 struct Block {
@@ -26,7 +26,7 @@ contract StructDemo {
         this.person = male;
     }
 
-    public function main(Female person1) {
+    public function main(FeMale person1) {
 
         require(person1.leftHanded == this.person.leftHanded);
         require(person1.addr == this.person.addr);
@@ -40,7 +40,7 @@ contract StructDemo {
         require(block.hash == b'000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f');
     }
 
-    function incAge(Female p1) : Person {
+    function incAge(FeMale p1) : Person {
         p1.age++;
         return p1;
     }

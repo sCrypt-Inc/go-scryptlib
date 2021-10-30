@@ -1,0 +1,127 @@
+import "util.scrypt";
+// The following code is Copyright MatterPool Inc.
+// Copyright (c) 2020 MatterPool Inc.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+// ----------------------------------------------------------------------------------------------
+// SuperAsset10 (SA10 for short) (Alpha)
+//
+// * Non-Fungible-Token (NFT) Smart Contract for Bitcoin.
+// ----------------------------------------------------------------------------------------------
+//
+// Features of SA10:
+//     - Mint, transfer, update, and melt tokens that retain their identity and satoshi balance until melted.
+//     - Supports seperate funding inputs and change outputs with ANYONECANPAY
+//     - Store arbitrary data payloads (HTML, JSON, Protobuf, PDFs, images, XML, etc)
+//     - Infuse satoshis to be locked into the asset for life cycle
+//     - Replay protection with globally unique ID passed on as an 'identity baton'
+//     - Can destroy the token via "melt" and retrieve the satoshis
+//     - Identical trust guarantees for the authenticity of this asset as a plain UTXO
+//     - Users can trivially verify authenticity and title history by requesting it in it's entirety from the seller
+//     - Wallets and indexers can proactively index these UTXO's via a blind pattern match for the minting pattern (see below)
+//     - Simplfied Payment Verification (SPV) and 0-conf works as expected with all the properties afforded to the native satoshi
+//
+//  Contract Code and State Layout:
+//  ==========================================================================
+//                       |
+//    SA10 STATIC CODE   | OP_RETURN tokenID(36B) ownerPublicKey(33B) [ payload(varlen) ]
+//                       |
+//  ==========================================================================
+//
+// Learn more:
+//   - Announcement: https://blog.matterpool.io/launch-of-superasset-sa10-nft-smart-contract-for-bitcoin/
+//   - SuperAsset white paper: https://bitcoinfiles.org/t/d6c18189966ea060452bcf59157235f2e15df3abf7383d9d450acff69cf29181
+//   - Github: https://github.com/MatterPool/superasset-js
+//
+//  Example transactions:
+//   - Deploy: https://whatsonchain.com/tx/afd702c8ccd5b3193f7be0afaace551430593b2e1af7264908e003f63bd5883f
+//   - Transfer (mint with JSON paylod update): https://whatsonchain.com/tx/9a731acb3ef5af7ec97a14725f481aa9cac69beba7567c596e155cd1993f2905
+//   - Transfer (Update with hex payload): https://whatsonchain.com/tx/b402d74aced39ef78489977b6dff0baadb0756f3f7a09de30af3fc9b7ff579a7
+//   - Transfer (Update with empty payload): https://whatsonchain.com/tx/e2253ec3f66f23b21726eae65f93d1a002e12413dceb7809ee7423a4794bc328
+//   - Melt: https://whatsonchain.com/tx/24e81130d115a67975c4558c3a617e0fdcb1def9126f8748b7c1072b0430e9b0
+//
+//  HOW TO INITIALLY DEPLOY:
+//
+//  1. Start with the base static code part of the output:
+//  Script Hex Static Part:
+//  `51014001800176018801a901ac5801145979008763615d7957795a798559798520ea401e7cedf9c428fbf9b92b75c90dfdd354394e58195d58e82bf79a8de31d622102773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d1792919212108dc7dc8b865cafc4cb5ff38624ba4c5385a3b8d7381f5bb49ba4a55963f10a20021606bfc5df21a9603c63d49e178b0620c9953d37c7ddeddfc12580925da43fcf0002100f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60615679557955795579557955795b795679aa616100790079517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e01007e81776157795679567956795679537956795479577995939521414136d08c5ed2bf3ba048afe6dcaebafeffffffffffffffffffffffffffffff0061517951795179517997527a75517a5179009f635179517993527a75517a685179777761527a75517a517951795296a0630079527994527a75517a68537982775279827754527993517993013051797e527e53797e57797e527e52797e5579517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7e56797e00797777777777777777777777776100795779ac77777777777777777761777777777777776169615d7961007901687f7700005279007f77517f75007901fd8763615379537f75517f77007901007e817761537a75527a527a5379535479937f75537f77527a75517a67007901fe8763615379557f75517f77007901007e817761537a75527a527a5379555479937f75557f77527a75517a67007901ff8763615379597f75517f77007901007e817761537a75527a527a5379595479937f75597f77527a75517a67615379517f75007f77007901007e817761537a75527a527a5379515479937f75517f77527a75517a686868517977777777617761007902a70c7f77007901247f75011279527901467f7501257f77ac690079000124808763616079007901687f7501447f777761517a756861527902a50c7f75026a247e51797e01217e0112797e615e7900798277005179009c63675179519c63615279007901007e817761007951a2517960a19a63610150517993515179517951938000795179827751947f75007f7777777761527a75517a675279519c51790281009c9a6361014f515179517951938000795179827751947f75007f7777777761527a75517a686875675179014c9f63615179515179517951938000795179827751947f75007f777777776153797e517a7567517902ff00a163014c615279515179517951938000795179827751947f75007f77777777617e53797e517a7567517903ffff00a163014d615279525179517951938000795179827751947f75007f77777777617e53797e517a7567014e615279545179517951938000795179827751947f75007f77777777617e53797e517a7568686868680079777777617e61011179616100790079827751795179012c947f7551790134947f77777761007901007e817761776100795779806152790079827700517902fd009f63615179515179517951938000795179827751947f75007f7777777761517a75675179030000019f6301fd615279525179517951938000795179827751947f75007f77777777617e517a756751790500000000019f6301fe615279545179517951938000795179827751947f75007f77777777617e517a75675179090000000000000000019f6301ff615279585179517951938000795179827751947f75007f77777777617e517a7568686868007953797e777777617e777761616160795a7959797e56797e51797e5a797e58797e7761607900795879806152790079827700517902fd009f63615179515179517951938000795179827751947f75007f7777777761517a75675179030000019f6301fd615279525179517951938000795179827751947f75007f77777777617e517a756751790500000000019f6301fe615279545179517951938000795179827751947f75007f77777777617e517a75675179090000000000000000019f6301ff615279585179517951938000795179827751947f75007f77777777617e517a7568686868007953797e777777617e7777617eaa61011179007982775179517958947f7551790128947f777777618777777777777777777777777777777777777777675979518763615c7957795a798559798520ea401e7cedf9c428fbf9b92b75c90dfdd354394e58195d58e82bf79a8de31d622102773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d1792919212108dc7dc8b865cafc4cb5ff38624ba4c5385a3b8d7381f5bb49ba4a55963f10a20021606bfc5df21a9603c63d49e178b0620c9953d37c7ddeddfc12580925da43fcf0002100f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60615679557955795579557955795b795679aa616100790079517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e01007e81776157795679567956795679537956795479577995939521414136d08c5ed2bf3ba048afe6dcaebafeffffffffffffffffffffffffffffff0061517951795179517997527a75517a5179009f635179517993527a75517a685179777761527a75517a517951795296a0630079527994527a75517a68537982775279827754527993517993013051797e527e53797e57797e527e52797e5579517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7e56797e00797777777777777777777777776100795779ac77777777777777777761777777777777776169615c7961007901687f7700005279007f77517f75007901fd8763615379537f75517f77007901007e817761537a75527a527a5379535479937f75537f77527a75517a67007901fe8763615379557f75517f77007901007e817761537a75527a527a5379555479937f75557f77527a75517a67007901ff8763615379597f75517f77007901007e817761537a75527a527a5379595479937f75597f77527a75517a67615379517f75007f77007901007e817761537a75527a527a5379515479937f75517f77527a75517a6868685179777777776177615f79517902a70c7f7701467f7501257f77ac6961615e79577956797e53797e51797e57797e55797e7761615e79616100790079827751795179012c947f7551790134947f77777761007901007e817761776100795579806152790079827700517902fd009f63615179515179517951938000795179827751947f75007f7777777761517a75675179030000019f6301fd615279525179517951938000795179827751947f75007f77777777617e517a756751790500000000019f6301fe615279545179517951938000795179827751947f75007f77777777617e517a75675179090000000000000000019f6301ff615279585179517951938000795179827751947f75007f77777777617e517a7568686868007953797e777777617e77776161615d79587957797e54797e51797e58797e56797e77615d7900795679806152790079827700517902fd009f63615179515179517951938000795179827751947f75007f7777777761517a75675179030000019f6301fd615279525179517951938000795179827751947f75007f77777777617e517a756751790500000000019f6301fe615279545179517951938000795179827751947f75007f77777777617e517a75675179090000000000000000019f6301ff615279585179517951938000795179827751947f75007f77777777617e517a7568686868007953797e777777617e7777617eaa615e79007982775179517958947f7551790128947f77777761877777777777777777777777777777777767006868`
+//
+//  2. Add an OP_RETURN and 0x24 (36) to the front of the null (all zeroes) minting assetId like this:
+//     `6a24000000000000000000000000000000000000000000000000000000000000000000000000`
+//
+//  3. Add 0x21 (33) to the front of the public key of the first initial owner:
+//     `2102f739ee427d204830da1578b028df8b113eb0cadf51e43bc21972423bd545e7c5`
+//
+//  4. Concatenate the hex strings in Steps 1 + 2 + 3 and broadcast the transaction with the desired number of satoshis to lock up.
+//
+// Alternatively, it is more convenient to use superasset-js or scrypt boilerplate https://github.com/scrypt-sv/boilerplate
+//
+// Behold, the Smart Contract...
+//
+contract SimpleAsset10 {
+    //
+    // Transfer and Update the Simple Asset
+    // Minting is implicit after the first transfer when starting from after deploying this contract with
+    // initial minting assetID=0x000000000000000000000000000000000000000000000000000000000000000000000000
+    //
+    // @param senderSig - the signature of owner of parent input that is authorizing this transaction
+    // @param receiver - Receiver of the NFT
+    // @param txPreimage - Pre-image of current tx, so that we can impose constraints on the outputs
+    // @param changeAddress - Address to send change
+    // @param changeSatoshis - Amount of satoshis to use (from the funding inputs) for change (thereby able to miner miner fees with difference)
+    // @param payload - Add and replace payload data
+    public function transfer(Sig senderSig, PubKey receiver, SigHashPreimage txPreimage, Ripemd160 changeAddress, int changeSatoshis, bytes payload) {
+        // Allow anyone to fund this operation, commit to all the outputs.
+        // Todo: Use Tx.checkPreimageOpt. Bug exists that prevents it from operating currently.
+        // Update after alpha phase over.
+        require(Util.checkPreimageSigHashType(txPreimage, SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID));
+        // Get the locking script of THIS input.
+        bytes lockingScript = Util.scriptCode(txPreimage);
+        // We know the static part of this contract is exactly 3237 in length (we pre-compiled and then replaced this constant).
+        // Make sure to add 2 bytes to skip the push data for the assetID (36 bytes of the outpoint in little-endian)
+        bytes dataState = lockingScript[3230 :];
+        bytes assetId = dataState[: 36]; // Note that the assetId is in little endian to make it easier to match by outpoint
+        // Validate and authorize the transaction (public key is 33 bytes)
+        require(checkSig(senderSig, PubKey(dataState[37 : 70])));
+        // Was this a minting (ie: first) transfer?
+        if (assetId == num2bin(0, 36)) {
+            // Then the assetId must be equal to the outpoint that this input is spending.
+            assetId = Util.outpoint(txPreimage);
+        }
+
+        // Use the constant code size of 3228 to pass along the assetId, receiver, and payload data (following all minimal push encoding rules)    // Make change from the other inputs that must exist to fund this transaction
+        // Hardcode the length of the assetId (0x24 = 36 bytes) and the public key (0x21 = 33 bytes).
+        require(hash256(Util.buildOutput(lockingScript[: 3228] + b'6a24' + assetId + b'21' + receiver + Util.writeVarMinimalPushdata(payload), Util.value(txPreimage)) + Util.buildOutput(Util.buildPublicKeyHashScript(changeAddress), changeSatoshis)) == Util.hashOutputs(txPreimage));
+    }
+
+    //
+    // Melt the SimpleAsset back to regular satoshis.
+    //
+    // @param ownerSig - the signature of owner of parent input that is authorizing this transaction
+    // @param receiverAddress - Receiver of NFT's value address
+    // @param txPreimage - Pre-image of current tx, so that we can impose constraints on the outputs
+    // @param changeAddress - Address to send change
+    // @param changeSatoshis - Amount of satoshis to use (from the funding inputs) for change (thereby able to miner miner fees with difference)
+    public function melt(Sig ownerSig, Ripemd160 receiverAddress, SigHashPreimage txPreimage, Ripemd160 changeAddress, int changeSatoshis) {
+        // Allow anyone to fund this operation, commit to all the outputs.
+        require(Util.checkPreimageSigHashType(txPreimage, SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID));
+        // Upon the first transfer the locking
+        bytes lockingScript = Util.scriptCode(txPreimage);
+        // Validate and authorize the transaction
+        require(checkSig(ownerSig, PubKey((lockingScript[3230 :])[37 : 70])));
+        require(hash256(Util.buildOutput(Util.buildPublicKeyHashScript(receiverAddress), Util.value(txPreimage)) + Util.buildOutput(Util.buildPublicKeyHashScript(changeAddress), changeSatoshis)) == Util.hashOutputs(txPreimage));
+    }
+}

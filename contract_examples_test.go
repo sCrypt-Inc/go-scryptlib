@@ -2,6 +2,7 @@ package scryptlib
 
 
 import (
+    "fmt"
     "testing"
     "context"
     "math/big"
@@ -83,7 +84,6 @@ func TestContractP2PKH(t *testing.T) {
     assert.NoError(t, err)
 
     tx := bt.NewTx()
-    assert.NotNil(t, tx)
 
     lockingScript, err := contractP2PKH.GetLockingScript()
     assert.NoError(t, err)
@@ -120,6 +120,93 @@ func TestContractP2PKH(t *testing.T) {
     contractP2PKH.SetExecutionContext(executionContext)
 
     success, err := contractP2PKH.EvaluatePublicFunction("unlock")
+    assert.NoError(t, err)
+    assert.Equal(t, true, success)
+}
+
+func TestContractStateCounter(t *testing.T) {
+    compilerResult, err := compilerWrapper.CompileContractFile("./test/res/statecounter.scrypt")
+    assert.NoError(t, err)
+
+    desc, err := compilerResult.ToDescWSourceMap()
+    assert.NoError(t, err)
+
+    contractStateCounter, err := NewContractFromDesc(desc)
+    assert.NoError(t, err)
+
+    constructorParams := map[string]ScryptType {
+        "counter": Int{big.NewInt(0)},
+    }
+    err = contractStateCounter.SetConstructorParams(constructorParams)
+    assert.NoError(t, err)
+
+    prevLockingScript, err := contractStateCounter.GetLockingScript()
+    assert.NoError(t, err)
+    prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+    // Increment counter for next locking script
+    err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(1)})
+    assert.NoError(t, err)
+    currLockingScript, err := contractStateCounter.GetLockingScript()
+    assert.NoError(t, err)
+
+    // Construct TX to derive preimage, which will get used as an contract call input.
+    tx := bt.NewTx()
+    err = tx.From(
+        "a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458", // Random TXID
+        0,
+        prevLockingScriptHex,
+        5000)
+    assert.NoError(t, err)
+    currOutput := bt.Output{
+        Satoshis:      4800,
+        LockingScript: currLockingScript,
+    }
+    tx.AddOutput(&currOutput)
+
+    preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+    assert.NoError(t, err)
+
+    unlockParams := map[string]ScryptType {
+        "txPreimage":  SigHashPreimage{preimage},
+        "amount":      Int{big.NewInt(4800)},
+    }
+    err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
+    assert.NoError(t, err)
+
+    executionContext := ExecutionContext{
+        Tx:             tx,
+        InputIdx:       0,
+        Flags:          scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+    }
+
+    fmt.Println(contractStateCounter.GetUnlockingScript("unlock"))
+
+    contractStateCounter.SetExecutionContext(executionContext)
+
+    success, err := contractStateCounter.EvaluatePublicFunction("unlock")
+    assert.NoError(t, err)
+    assert.Equal(t, true, success)
+
+}
+
+func TestContractDynamicArrayDemo(t *testing.T) {
+    compilerResult, err := compilerWrapper.CompileContractFile("./test/res/dynamicArrayDemo.scrypt")
+    assert.NoError(t, err)
+
+    desc, err := compilerResult.ToDescWSourceMap()
+    assert.NoError(t, err)
+
+    contractDemo, err := NewContractFromDesc(desc)
+    assert.NoError(t, err)
+
+    testParams := map[string]ScryptType {
+        "_x": Int{big.NewInt(0)},
+    }
+    err = contractDemo.SetPublicFunctionParams("test", testParams)
+    assert.NoError(t, err)
+
+    success, err := contractDemo.EvaluatePublicFunction("test")
     assert.NoError(t, err)
     assert.Equal(t, true, success)
 }

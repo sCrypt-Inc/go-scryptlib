@@ -38,6 +38,7 @@ type ScryptType interface {
     Hex()           (string, error)
     Bytes()         ([]byte, error)
     GetTypeString() string
+    StateHex()      (string, error)
 }
 
 type Int struct {
@@ -90,12 +91,13 @@ func (intType Int) Bytes() ([]byte, error) {
             b = append(b, 0x00)
         }
     }
-    pushDataPrefix, err := bscript.PushDataPrefix(b)
+
+    b, err := appendPushdataPrefix(b)
     if err != nil {
         return res, err
     }
 
-    return append(pushDataPrefix, b...), nil
+    return b, nil
 }
 
 func (intType Int) GetTypeString() string {
