@@ -7,8 +7,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/libsv/go-bk v0.1.4 h1:bTxlerGeibh8RRmyhFK03wSAEp6EAJxGR4vXuRT0LCE=
 github.com/libsv/go-bk v0.1.4/go.mod h1:xbDkeFFpP0uyFaPLnP6TwaLpAsHaslZ0LftTdWlB6HI=
-github.com/libsv/go-bt/v2 v2.0.0-beta.9 h1:3dJ4I06ET5aICasPxxqVnwMha7FUh1wQGmlqGD85Y38=
-github.com/libsv/go-bt/v2 v2.0.0-beta.9/go.mod h1:6Vk1qMlMoFJFNm7rR7NmFx4VwHNMCi4+V9WBqTd37rQ=
+github.com/libsv/go-bt/v2 v2.0.0-beta.12 h1:xjCt06cUW5a8o1Qyk7pGSkvThMLTy2HzPrJFmsQIPBc=
+github.com/libsv/go-bt/v2 v2.0.0-beta.12/go.mod h1:Ict9mJuFxjzNszELtCTtAHH5tQtQd2fnXUKG1n1ldP0=
+github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
+github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

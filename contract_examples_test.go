@@ -2,9 +2,7 @@ package scryptlib
 
 
 import (
-    "fmt"
     "testing"
-    "context"
     "math/big"
     "encoding/hex"
 
@@ -95,17 +93,18 @@ func TestContractP2PKH(t *testing.T) {
         5000)
     assert.NoError(t, err)
 
-    assert.NoError(t, err)
-    localSigner := bt.LocalSigner{priv}
-
     var shf sighash.Flag = sighash.AllForkID
-    _, sigBytes, err := localSigner.Sign(context.Background(), tx, 0, shf)
+    sh, err := tx.CalcInputSignatureHash(0, shf)
     assert.NoError(t, err)
-    sig, err := NewSigFromDECBytes(sigBytes, shf)
+	sig, err := priv.Sign(sh)
     assert.NoError(t, err)
+    //sigBytes := sig.Serialise()
+    //assert.NoError(t, err)
+    //sig, err := NewSigFromDECBytes(sigBytes, shf)
+    //assert.NoError(t, err)
 
     unlockParams := map[string]ScryptType {
-        "sig": sig,
+        "sig": Sig{sig, shf},
         "pubKey": PubKey{priv.PubKey()},
     }
     err = contractP2PKH.SetPublicFunctionParams("unlock", unlockParams)
@@ -180,13 +179,62 @@ func TestContractStateCounter(t *testing.T) {
         Flags:          scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
     }
 
-    fmt.Println(contractStateCounter.GetUnlockingScript("unlock"))
-
     contractStateCounter.SetExecutionContext(executionContext)
 
     success, err := contractStateCounter.EvaluatePublicFunction("unlock")
     assert.NoError(t, err)
     assert.Equal(t, true, success)
+
+    // Wrong increment:
+    err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(2)})
+    assert.NoError(t, err)
+    currLockingScript, err = contractStateCounter.GetLockingScript()
+    assert.NoError(t, err)
+    tx = bt.NewTx()
+    err = tx.From(
+        "a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458", // Random TXID
+        0,
+        prevLockingScriptHex,
+        5000)
+    assert.NoError(t, err)
+    currOutput = bt.Output{
+        Satoshis:      4800,
+        LockingScript: currLockingScript,
+    }
+    tx.AddOutput(&currOutput)
+
+    preimage, err = tx.CalcInputPreimage(0, sighash.AllForkID)
+    assert.NoError(t, err)
+
+    unlockParams = map[string]ScryptType {
+        "txPreimage":  SigHashPreimage{preimage},
+        "amount":      Int{big.NewInt(4800)},
+    }
+    err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
+    assert.NoError(t, err)
+
+    executionContext = ExecutionContext{
+        Tx:             tx,
+        InputIdx:       0,
+        Flags:          scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+    }
+
+    contractStateCounter.SetExecutionContext(executionContext)
+    success, err = contractStateCounter.EvaluatePublicFunction("unlock")
+    assert.Error(t, err)
+    assert.Equal(t, false, success)
+
+    // Wrong amount:
+    err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(1)})
+    assert.NoError(t, err)
+    unlockParams = map[string]ScryptType {
+        "txPreimage":  SigHashPreimage{preimage},
+        "amount":      Int{big.NewInt(4799)},
+    }
+    err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
+    success, err = contractStateCounter.EvaluatePublicFunction("unlock")
+    assert.Error(t, err)
+    assert.Equal(t, false, success)
 
 }
 
