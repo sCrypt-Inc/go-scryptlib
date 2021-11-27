@@ -26,7 +26,7 @@ type functionParam struct {
 func (param *functionParam) setParamValue(value ScryptType) error {
     // TODO: TypeString should already be resolved so make sure the parameter values that get to here are too!
     if param.TypeString != value.GetTypeString() {
-        errMsg := fmt.Sprintf("Passed object of type \"%s\" for parameter with name \"%s\". Expected \"%s\".",
+        errMsg := fmt.Sprintf("Passed item of type \"%s\" for parameter with name \"%s\". Expected \"%s\".",
                         value.GetTypeString(), param.Name, param.TypeString)
         return errors.New(errMsg)
     }
@@ -96,7 +96,10 @@ func (contract *Contract) SetConstructorParams(params map[string]ScryptType) err
             }
         }
 
-        paramPlaceholder.setParamValue(value)
+        err := paramPlaceholder.setParamValue(value)
+        if err != nil {
+            return err
+        }
     }
 
     return nil
@@ -269,32 +272,34 @@ func (contract *Contract) GetLockingScript() (*bscript.Script, error) {
 }
 
 func (contract *Contract) GetCodePart() (string, error) {
+    // Get the code part of the locking script. This will contain contract opcodes and constructor parameters, that aren't statefull.
+    // It also contains placeholders for statefull variables, that the script needs during evaluation. These always have the value 0x00.
+    // The actual values of the statefull variables are in the data part of the locking script.
+
+    // TODO: This whole function would probably be more efficient if we would iterate through each placeholder in the template
+    //       and finding the appropriate param value, instead of deriving, searching and replacing them for each param itself.
+
     var res string
+    var err error
 
     lockingScriptHex := contract.lockingScriptHexTemplate
 
     lockingScriptHex = strings.Replace(lockingScriptHex, "<__codePart__>", "00", 1)
 
     for _, param := range contract.constructorParams {
-        // If this parameter is part of the contracts state, then we only have to substitute the placeholder with an arbitrary
-        // value. This value gets replaced by the actual vale in the state part of the script during a contract call evaluation.
-        paramHex := "00"
-        if ! param.IsState {
-            hexVal, err := param.Value.Hex()
-            if err != nil {
-                return res, err
-            }
-            paramHex = hexVal
+        lockingScriptHex, err = substituteParamInTemplate(lockingScriptHex, param.Value, param.Name, param.IsState)
+        if err != nil {
+            return res, err
         }
-
-        toReplace := fmt.Sprintf("<%s>", param.Name)
-        lockingScriptHex = strings.Replace(lockingScriptHex, toReplace, paramHex, 1)
     }
 
     return lockingScriptHex, nil
 }
 
 func (contract *Contract) GetDataPart() (string, error) {
+    // Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
+    // The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
+
     var res string
 
     contractStateVersion := 0
@@ -349,9 +354,18 @@ func (contract *Contract) UpdateStateVariable(variableName string, value ScryptT
     return errors.New(fmt.Sprintf("No variable named \"%s\".", variableName))
 }
 
-// Returns a map, that maps struct names as defined in the contract to their respective instances of ScryptType.
-func (contract *Contract) GetStructTypes() map[string]Struct {
-    return contract.structTypes
+// Get templates of all struct types defined in the contract. Returns map with struct type names as keys and templates as values.
+func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
+    res := make(map[string]Struct)
+    for key, value := range contract.structTypes {
+      res[key] = value
+    }
+    return res
+}
+
+// Returns template of a specific struct type defined in the contract.
+func (contract *Contract) GetStructTypeTemplate(structName string) Struct {
+    return contract.structTypes[structName]
 }
 
 func constructAbiPlaceholders(desc map[string]interface{}, structTypes map[string]Struct,
@@ -386,6 +400,9 @@ func constructAbiPlaceholders(desc map[string]interface{}, structTypes map[strin
                 // Create copy of struct template.
                 structName := GetStructNameByType(pType)
                 value = structTypes[structName]
+                // We only want the name of the struct as the param type
+                // and not the whole desc type string.
+                pType = GetStructNameByType(pType)
             } else if IsArrayType(pType) {
                 arrVal, err := constructArrayType(pType, structItemsByTypeString, aliases)
                 if err != nil {
@@ -468,8 +485,8 @@ func constructStructType(structItem map[string]interface{}, structItemsByTypeStr
         var val ScryptType
         var err error
 
-        structItem, isStructType := structItemsByTypeString[pTypeResolved]
-        if isStructType {
+        if IsStructType(pTypeResolved) {
+            structItem := structItemsByTypeString[pTypeResolved]
             val, err = constructStructType(structItem.(map[string]interface{}), structItemsByTypeString, aliases)
         } else if IsArrayType(pTypeResolved) {
             val, err = constructArrayType(pTypeResolved, structItemsByTypeString, aliases)
@@ -485,8 +502,9 @@ func constructStructType(structItem map[string]interface{}, structItemsByTypeStr
     }
 
     return Struct{
+        typeName:    structItem["name"].(string),
         keysInOrder: keysInOrder,
-        values: values,
+        values:      values,
     }, nil
 }
 
@@ -494,6 +512,9 @@ func constructArrayType(typeString string, structItemsByTypeString map[string]in
                                        aliases map[string]string) (Array, error) {
     var res Array
     typeName, arraySizes := FactorizeArrayTypeString(typeString)
+    if IsStructType(typeName) {
+        typeName = GetStructNameByType(typeName)
+    }
 
     var items []ScryptType
     for dimension := len(arraySizes) - 1; dimension >= 0; dimension-- {
@@ -619,5 +640,108 @@ func NewContract(compilerResult CompilerResult) (Contract, error) {
     }
 
     return res, nil
+}
+
+func substituteParamInTemplate(lockingScriptHex string, elem ScryptType, paramName string, isState bool) (string, error) {
+    typeStr := elem.GetTypeString()
+    if IsBasicScryptType(typeStr) {
+        // If this parameter is part of the contracts state, then we only have to substitute the placeholder with an arbitrary
+        // value. This value gets replaced by the actual vale in the state part of the script during a contract call evaluation.
+        elemHex := "00"
+        if ! isState {
+            hexVal, err := elem.Hex()
+            if err != nil {
+                return "", err
+            }
+            elemHex = hexVal
+        }
+        toReplace := fmt.Sprintf("<%s>", paramName)
+        return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
+    } else if IsArrayType(typeStr) {
+        arr := elem.(Array)
+        return substituteArrayParamInTemplate(lockingScriptHex, arr, paramName, isState)
+    } else {
+        structItem := elem.(Struct)
+        return substituteStructParamInTemplate(lockingScriptHex, structItem, paramName, isState)
+    }
+}
+
+func substituteArrayParamInTemplate(lockingScriptHex string, arr Array, paramName string, isState bool) (string, error) {
+    elems := FlattenArray(arr)
+    elemTypeName, sizes := FactorizeArrayTypeString(arr.GetTypeString())
+    // TODO: Make checking for struct type strings simpler.
+    if IsStructType(elemTypeName) {
+        elemTypeName = GetStructNameByType(elemTypeName)
+    }
+    areElemsBasicScryptTypes := IsBasicScryptType(elemTypeName)
+
+    for i := 0; i < len(elems); i++ {
+        elem := elems[i]
+
+        indexes := make([]int, len(sizes))
+        offsetMult := 1
+        for j := len(sizes) - 1; j >= 0; j-- {
+            size, err := strconv.Atoi(sizes[j])
+            if err != nil {
+                return "", err
+            }
+
+            offsetMult *= size
+            indexes[j] = i % offsetMult
+        }
+
+        var sb strings.Builder
+        for _, index := range indexes {
+            sb.WriteString(fmt.Sprintf("[%d]", index))
+        }
+        toReplace := fmt.Sprintf("%s%s", paramName, sb.String())
+        if areElemsBasicScryptTypes {
+            elemHex, err := elem.Hex()
+            if err != nil {
+                return "", err
+            }
+            if isState {
+                lockingScriptHex = strings.Replace(lockingScriptHex, "<" + toReplace + ">", "00", 1)
+            } else {
+                lockingScriptHex = strings.Replace(lockingScriptHex, "<" + toReplace + ">", elemHex, 1)
+            }
+        } else {
+            // Structs.
+            var err error
+            lockingScriptHex, err = substituteStructParamInTemplate(lockingScriptHex, elem.(Struct), toReplace,isState)
+            if err != nil {
+                return "", err
+            }
+        }
+    }
+
+    return lockingScriptHex, nil
+}
+
+func substituteStructParamInTemplate(lockingScriptHex string, structItem Struct, paramName string, isState bool) (string, error) {
+    for _, key := range structItem.keysInOrder {
+        toReplace := fmt.Sprintf("%s.%s", paramName, key)
+        val := structItem.values[key]
+
+        if IsArrayType(val.GetTypeString()) {
+            res, err := substituteArrayParamInTemplate(lockingScriptHex, val.(Array), toReplace, isState)
+            if err != nil {
+                return "", err
+            }
+            lockingScriptHex = res
+        } else {
+            if isState {
+                lockingScriptHex = strings.Replace(lockingScriptHex, "<" + toReplace + ">", "00", 1)
+            } else {
+                valHex, err := val.Hex()
+                if err != nil {
+                    return "", err
+                }
+                lockingScriptHex = strings.Replace(lockingScriptHex, "<" + toReplace + ">", valHex, 1)
+            }
+        }
+    }
+
+    return lockingScriptHex, nil
 }
 

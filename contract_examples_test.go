@@ -72,7 +72,7 @@ func TestContractP2PKH(t *testing.T) {
     wif_key, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
     assert.NoError(t, err)
     priv := wif_key.PrivKey
-    addr := crypto.Hash160(wif_key.SerialisePubKey())
+    addr := crypto.Hash160(priv.PubKey().SerialiseCompressed())
 
     pubKeyHash := Ripemd160{addr}
     constructorParams := map[string]ScryptType {
@@ -98,10 +98,6 @@ func TestContractP2PKH(t *testing.T) {
     assert.NoError(t, err)
 	sig, err := priv.Sign(sh)
     assert.NoError(t, err)
-    //sigBytes := sig.Serialise()
-    //assert.NoError(t, err)
-    //sig, err := NewSigFromDECBytes(sigBytes, shf)
-    //assert.NoError(t, err)
 
     unlockParams := map[string]ScryptType {
         "sig": Sig{sig, shf},
@@ -255,6 +251,188 @@ func TestContractDynamicArrayDemo(t *testing.T) {
     assert.NoError(t, err)
 
     success, err := contractDemo.EvaluatePublicFunction("test")
+    assert.NoError(t, err)
+    assert.Equal(t, true, success)
+}
+
+func TestContractToken(t *testing.T) {
+    wif_key0, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
+    assert.NoError(t, err)
+    priv0 := wif_key0.PrivKey
+
+    wif_key1, err := wif.DecodeWIF("cV1Y7ARUr9Yx7BR55nTdnR7ZXNJphZtCCMBTEZBJe1hXt2kB684q")
+    assert.NoError(t, err)
+    priv1 := wif_key1.PrivKey
+
+    compilerResult, err := compilerWrapper.CompileContractFile("./test/res/token.scrypt")
+    assert.NoError(t, err)
+
+    desc, err := compilerResult.ToDescWSourceMap()
+    assert.NoError(t, err)
+
+    token, err := NewContractFromDesc(desc)
+    assert.NoError(t, err)
+
+    new_account0 := token.GetStructTypeTemplate("Account")
+    new_account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
+    new_account0.UpdateValue("balance", Int{big.NewInt(60)})
+    new_account1 := token.GetStructTypeTemplate("Account")
+    new_account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
+    new_account1.UpdateValue("balance", Int{big.NewInt(40)})
+    new_accounts := Array{[]ScryptType{new_account0, new_account1}}
+
+    constructorParams := map[string]ScryptType {
+        "accounts": new_accounts,
+    }
+    err = token.SetConstructorParams(constructorParams)
+    assert.NoError(t, err)
+
+    newLockingScript, err := token.GetLockingScript()
+    assert.NoError(t, err)
+
+    account0 := token.GetStructTypeTemplate("Account")
+    account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
+    account0.UpdateValue("balance", Int{big.NewInt(100)})
+    account1 := token.GetStructTypeTemplate("Account")
+    account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
+    account1.UpdateValue("balance", Int{big.NewInt(0)})
+    accounts := Array{[]ScryptType{account0, account1}}
+
+    constructorParams = map[string]ScryptType {
+        "accounts": accounts,
+    }
+    err = token.SetConstructorParams(constructorParams)
+    assert.NoError(t, err)
+
+    prevLockingScript, err := token.GetLockingScript()
+    assert.NoError(t, err)
+    prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+
+    tx := bt.NewTx()
+    err = tx.From(
+        "a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+        0,
+        prevLockingScriptHex,
+        300000)
+    assert.NoError(t, err)
+    currOutput := bt.Output{
+        Satoshis:      222222,
+        LockingScript: newLockingScript,
+    }
+    tx.AddOutput(&currOutput)
+
+    preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+    assert.NoError(t, err)
+
+    var shf sighash.Flag = sighash.AllForkID
+    sh, err := tx.CalcInputSignatureHash(0, shf)
+    assert.NoError(t, err)
+	senderSig, err := priv0.Sign(sh)
+    assert.NoError(t, err)
+
+    unlockParams := map[string]ScryptType {
+        "sender":      PubKey{priv0.PubKey()},
+        "senderSig":   Sig{senderSig, shf},
+        "receiver":    PubKey{priv1.PubKey()},
+        "value":       Int{big.NewInt(40)},
+        "txPreimage":  SigHashPreimage{preimage},
+        "amount":      Int{big.NewInt(222222)},
+    }
+    err = token.SetPublicFunctionParams("transfer", unlockParams)
+    assert.NoError(t, err)
+
+    executionContext := ExecutionContext{
+        Tx:             tx,
+        InputIdx:       0,
+        Flags:          scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+    }
+
+    token.SetExecutionContext(executionContext)
+    success, err := token.EvaluatePublicFunction("transfer")
+    assert.NoError(t, err)
+    assert.Equal(t, true, success)
+}
+
+func TestContractNestedStructArr(t *testing.T) {
+
+    source := `
+        struct Thing {
+            int someNumber;
+            OtherThing[2] otherThings;
+        }
+
+        struct OtherThing {
+            bytes someBytes;
+            int[3] numbers;
+        }
+
+        contract NestedStructs {
+            Thing thing;
+
+            public function unlock(int[2][3] numbers, int someNumber, bytes[2] someBytes) {
+                loop (2) : i {
+                    auto otherThing = this.thing.otherThings[i];
+                    require(otherThing.someBytes == someBytes[i]);
+                    loop (3) : j {
+                        require(otherThing.numbers[j] == numbers[i][j]);
+                    }
+                }
+                require(this.thing.someNumber == someNumber);
+            }
+        }`
+
+    compilerResult, err := compilerWrapper.CompileContractString(source)
+    assert.NoError(t, err)
+
+    desc, err := compilerResult.ToDescWSourceMap()
+    assert.NoError(t, err)
+
+    nestedStructs, err := NewContractFromDesc(desc)
+    assert.NoError(t, err)
+
+    otherThingsVals := make([]ScryptType, 2)
+    for i := 0; i < 2; i++ {
+        otherThing := nestedStructs.GetStructTypeTemplate("OtherThing")
+        otherThing.UpdateValue("someBytes", Bytes{make([]byte, 3)})
+        numVals := make([]ScryptType, 3)
+        for j := 0; j < 3; j++ {
+            numVals[j] = Int{big.NewInt(0)}
+        }
+        otherThing.UpdateValue("numbers", Array{numVals})
+        otherThingsVals[i] = otherThing
+    }
+
+    thing := nestedStructs.GetStructTypeTemplate("Thing")
+    thing.UpdateValue("someNumber", Int{big.NewInt(123)})
+    thing.UpdateValue("otherThings", Array{otherThingsVals})
+
+    constructorParams := map[string]ScryptType {
+        "thing": thing,
+    }
+    err = nestedStructs.SetConstructorParams(constructorParams)
+    assert.NoError(t, err)
+
+    numbers := make([]ScryptType, 2)
+    bytes := make([]ScryptType, 2)
+    for i := 0; i < 2; i++ {
+        numVals := make([]ScryptType, 3)
+        for j := 0; j < 3; j++ {
+            numVals[j] = Int{big.NewInt(0)}
+        }
+        numbers[i] = Array{numVals}
+        bytes[i] = Bytes{make([]byte, 3)}
+    }
+
+    unlockParams := map[string]ScryptType {
+        "numbers": Array{numbers},
+        "someNumber": Int{big.NewInt(123)},
+        "someBytes": Array{bytes},
+    }
+    err = nestedStructs.SetPublicFunctionParams("unlock", unlockParams)
+    assert.NoError(t, err)
+
+    success, err := nestedStructs.EvaluatePublicFunction("transfer")
     assert.NoError(t, err)
     assert.Equal(t, true, success)
 }

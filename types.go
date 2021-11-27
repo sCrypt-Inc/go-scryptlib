@@ -193,7 +193,7 @@ func (pubKeyType PubKey) Hex() (string, error) {
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
     var res []byte
-    b := pubKeyType.value.SerialiseUncompressed()
+    b := pubKeyType.value.SerialiseCompressed()
     pushDataPrefix, err := bscript.PushDataPrefix(b)
     if err != nil {
         return res, err
@@ -425,10 +425,23 @@ func (arrayType Array) Bytes() ([]byte, error) {
 }
 
 func (arrayType Array) GetTypeString() string {
+    thisSize := len(arrayType.values)
+    if thisSize > 0 {
+        elemTypeString := arrayType.values[0].GetTypeString()
+
+        if IsArrayType(elemTypeString) {
+            // Split type string and lengths and add this arrays lengths at the beginning.
+            tokens := strings.SplitN(elemTypeString, "[", 2)
+            return fmt.Sprintf("%s[%d][%s", tokens[0], thisSize, tokens[1])
+        } else {
+            return fmt.Sprintf("%s[%d]", elemTypeString, thisSize)
+        }
+    }
     return ""
 }
 
 type Struct struct {
+    typeName string
     keysInOrder []string
     values map[string]ScryptType
 }
@@ -460,8 +473,21 @@ func (structType Struct) Bytes() ([]byte, error) {
     return buff.Bytes(), nil
 }
 
+func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) {
+    // TODO: Is there a more efficient way to do value updates?
+    newVals := make(map[string]ScryptType)
+    for key, val := range structType.values {
+        if key == fieldName {
+            newVals[key] = newVal
+        } else {
+            newVals[key] = val
+        }
+    }
+    structType.values = newVals
+}
+
 func (structType Struct) GetTypeString() string {
-    return ""
+    return structType.typeName
 }
 
 // TODO: Function for creating structs

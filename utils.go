@@ -34,7 +34,9 @@ func ToLiteralArrayTypeStr(typeName string, arraySizes []string)  string {
     var resBuff strings.Builder
     resBuff.WriteString(typeName)
     for _, size := range arraySizes {
+        resBuff.WriteRune('[')
         resBuff.WriteString(size)
+        resBuff.WriteRune(']')
     }
     return resBuff.String()
 }
@@ -63,6 +65,13 @@ func IsArrayType(typeStr string) bool {
 func IsStructType(typeStr string) bool {
     match, _ := regexp.MatchString(`^struct\s(\w+)\s\{\}$`, typeStr)
     return match
+}
+
+// Check if string is a basic sCrypt type.
+// e.g. "int", "bool", "bytes" ...
+func IsBasicScryptType(typeStr string) bool {
+    _, res := BASIC_SCRYPT_TYPES[typeStr]
+    return res
 }
 
 // Returns struct name from type string.
@@ -198,6 +207,26 @@ func CompareScryptVariableTypes(a ScryptType, b ScryptType) bool {
         typeActualParam := reflect.TypeOf(b).Name()
 
         return typePlaceholder == typeActualParam
+}
+
+func FlattenArray(arr Array) ([]ScryptType) {
+    res := make([]ScryptType, 0)
+
+    if len(arr.values) == 0 {
+        return res
+    }
+
+    areSubElemsArrays := IsArrayType(arr.values[0].GetTypeString())
+
+    if areSubElemsArrays {
+        for _, elem := range arr.values {
+            res = append(res, FlattenArray(elem.(Array))...)
+        }
+    } else {
+        res = append(res, arr.values...)
+    }
+
+    return res
 }
 
 func reSubMatchMap(r *regexp.Regexp, str string) map[string]string {

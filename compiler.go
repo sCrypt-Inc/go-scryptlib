@@ -149,7 +149,7 @@ type CompilerWrapper struct {
     ContractPath string
 }
 
-func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string) (CompilerResult, error) {
+func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix string, fromFile bool) (CompilerResult, error) {
     var res CompilerResult
 
     // Create outDir, if it doesn't exist yet.
@@ -160,18 +160,37 @@ func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string)
         }
     }
 
-    contractPath, err := filepath.Abs(contractPath)
-    if err != nil {
-        return res, err
+    var contractPath string
+    if fromFile {
+        var err error
+        contractPath, err = filepath.Abs(source)
+        if err != nil {
+            return res, err
+        }
+        compilerWrapper.ContractPath = contractPath
+    } else {
+        compilerWrapper.ContractPath = "stdin"
     }
-    compilerWrapper.ContractPath = contractPath
 
     // Assemble compiler command.
     compilerCmd := compilerWrapper.assembleCompilerCommand(contractPath)
 
     // Run the assembled command.
     compilerCmdParts := strings.Split(compilerCmd, " ")
-    compilerStdout, err := exec.Command(compilerCmdParts[0], compilerCmdParts[1:]...).CombinedOutput()
+    cmd := exec.Command(compilerCmdParts[0], compilerCmdParts[1:]...)
+
+    if !fromFile {
+        stdin, err := cmd.StdinPipe()
+        if err != nil {
+            return res, err
+        }
+        go func() {
+            defer stdin.Close()
+            io.WriteString(stdin, source)
+        }()
+    }
+
+    compilerStdout, err := cmd.CombinedOutput()
     if err != nil {
         return res, err
     }
@@ -183,8 +202,6 @@ func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string)
     }
 
     // Process results to desc file.
-    sourceFilePrefix := compilerWrapper.getSourceFilePrefix(contractPath)
-
     outPathAst := filepath.Join(compilerWrapper.OutDir, fmt.Sprintf("%s_ast.json", sourceFilePrefix))
     outPathAsm := filepath.Join(compilerWrapper.OutDir, fmt.Sprintf("%s_asm.json", sourceFilePrefix))
 
@@ -201,7 +218,13 @@ func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string)
     if err != nil {
         return res, err
     }
-    sourceMD5, err := compilerWrapper.getSourceMD5(contractPath)
+
+    var sourceMD5 string
+    if fromFile {
+        sourceMD5, err = compilerWrapper.getSourceFileMD5(contractPath)
+    } else {
+        sourceMD5, err = compilerWrapper.getSourceMD5(contractPath)
+    }
     if err != nil {
         return res, err
     }
@@ -261,9 +284,14 @@ func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string)
     return res, nil
 }
 
-//func (compilerWrapper *CompilerWrapper) CompileContractString(contractCode string) (CompilerResult, error) {
-//
-//}
+func (compilerWrapper *CompilerWrapper) CompileContractFile(contractPath string) (CompilerResult, error) {
+    sourceFilePrefix := compilerWrapper.getSourceFilePrefix(contractPath)
+    return compilerWrapper.compile(contractPath, sourceFilePrefix, true)
+}
+
+func (compilerWrapper *CompilerWrapper) CompileContractString(contractCode string) (CompilerResult, error) {
+    return compilerWrapper.compile(contractCode, "stdin", false)
+}
 
 func (compilerWrapper *CompilerWrapper) extractCompilerWarnings(compilerStdout string) ([]CompilerWarning, error) {
     var warnings []CompilerWarning
@@ -305,7 +333,7 @@ func (compilerWrapper *CompilerWrapper) extractCompilerWarnings(compilerStdout s
     return warnings, nil
 }
 
-func (compilerWrapper *CompilerWrapper) getSourceMD5(contractPath string) (string, error) {
+func (compilerWrapper *CompilerWrapper) getSourceFileMD5(contractPath string) (string, error) {
     fileContract, err := os.Open(contractPath)
     if err != nil {
         return "", err
@@ -322,8 +350,14 @@ func (compilerWrapper *CompilerWrapper) getSourceMD5(contractPath string) (strin
         return "", err
     }
 
+    return compilerWrapper.getSourceMD5(string(source))
+}
+
+func (compilerWrapper *CompilerWrapper) getSourceMD5(source string) (string, error) {
+    sourceBytes := []byte(source)
+
     hasher := md5.New()
-    hasher.Write(source)
+    hasher.Write(sourceBytes)
 
     return hex.EncodeToString(hasher.Sum(nil)), nil
 }
@@ -770,7 +804,7 @@ func (compilerWrapper *CompilerWrapper) resolveArrayTypeStaticIntConsts(contract
             if strings.Contains(sizeString, ".") {
                 key = sizeString
             } else {
-                key = fmt.Sprintf("%s.%s", contractName, sizeString)
+                key = fmt.Sprintf("%s.[%s]", contractName, sizeString) // TODO
             }
             sizes = append(sizes, (*staticIntConsts)[key].String())
         }
@@ -786,6 +820,7 @@ func (cocompilerWrapper *CompilerWrapper) getSourceFilePrefix(contractPath strin
 
 func (compilerWrapper *CompilerWrapper) assembleCompilerCommand(contractPathAbs string) string {
     // Aseemble command for compiling the sCrypt contract file, passed via contractPathAbs.
+    // If contractPathAbs is an empty string, then assume source code will be passed via stdin.
     // TODO: Should this return a string or a slice with the command parts as elements?
     var cmdBuff strings.Builder
 
