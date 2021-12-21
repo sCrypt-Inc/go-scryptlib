@@ -556,7 +556,10 @@ func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
 
 func (hashedMapType HashedMap) Hex() (string, error)  {
     b, err := hashedMapType.Bytes()
-    return string(b), err
+    if err != nil {
+        return "", err
+    }
+    return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (hashedMapType HashedMap) Bytes() ([]byte, error)  {
@@ -575,6 +578,98 @@ func (hashedMapType HashedMap) Bytes() ([]byte, error)  {
 func NewHashedMap() HashedMap {
     return HashedMap{
         values:     make(map[[32]byte][32]byte),
+    }
+}
+
+type HashedSet struct {
+    values map[[32]byte]bool
+}
+
+func (hashedSetType HashedSet) GetTypeString() string {
+    return "HashedSet"
+}
+
+func (hashedSetType *HashedSet) Add(key ScryptType) error {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return err
+    }
+    hashedSetType.values[hashKey] = true
+
+    return nil
+}
+
+func (hashedSetType *HashedSet) Delete(key ScryptType) error {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return err
+    }
+    delete(hashedSetType.values, hashKey)
+
+    return nil
+}
+
+func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int, error) {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return -1, err
+    }
+    
+    keysSorted := hashedSetType.GetKeysSorted()
+
+    idx := 0
+    for _, k := range keysSorted {
+        if k == hashKey {
+            return idx, nil
+        }
+        idx++
+    }
+
+    return -1, errors.New(fmt.Sprintf("Key not present in HashedMap: \"%s\"", hashKey))
+}
+
+func (hashedSetType HashedSet) GetKeysSorted() [][32]byte {
+    keysAll := make([][32]byte, len(hashedSetType.values))
+    i := 0
+    for k := range hashedSetType.values {
+        keysAll[i] = k
+        i++
+    }
+    
+    sort.SliceStable(keysAll,
+        func(i, j int) bool {
+            a := new(big.Int)
+            b := new(big.Int)
+            a.SetBytes(ReverseByteSlice(keysAll[i][:]))
+            b.SetBytes(ReverseByteSlice(keysAll[j][:]))
+            return a.Cmp(b) > 0
+        })
+
+    return keysAll
+}
+
+func (hashedSetType HashedSet) Hex() (string, error)  {
+    b, err := hashedSetType.Bytes()
+    if err != nil {
+        return "", err
+    }
+    return EvenHexStr(fmt.Sprintf("%x", b)), nil
+}
+
+func (hashedSetType HashedSet) Bytes() ([]byte, error)  {
+    var buff bytes.Buffer
+
+    keysSorted := hashedSetType.GetKeysSorted()
+    for _, k := range keysSorted {
+        buff.Write(k[:])
+    }
+
+    return buff.Bytes(), nil
+}
+
+func NewHashedSet() HashedSet {
+    return HashedSet{
+        values:     make(map[[32]byte]bool),
     }
 }
 
