@@ -8,6 +8,7 @@ import (
     "errors"
     "encoding/binary"
     "math/big"
+    "sort"
 
     "github.com/libsv/go-bt/v2/bscript"
     "github.com/libsv/go-bt/v2/sighash"
@@ -35,27 +36,16 @@ var BASIC_SCRYPT_TYPES = map[string]bool{
 //       Would reduce memory print when calling methods of large struct or array structs, but is it worth it?
 
 type ScryptType interface {
-    Hex()           (string, error)
-    Bytes()         ([]byte, error)
-    GetTypeString() string
-    StateHex()      (string, error)
+    Hex()             (string, error)
+    Bytes()           ([]byte, error)
+    GetTypeString()   string
+    StateHex()        (string, error)
+    StateBytes()      ([]byte, error)
 }
 
 type Int struct {
     value *big.Int
 }
-
-//func (intType Int) ASM() (string, error) {
-//    s, err := bscript.NewFromHexString(bigIntToHex_LE(intType.value))
-//    if err != nil {
-//        return "", err
-//    }
-//    asm, err := s.ToASM()
-//    if err != nil {
-//        return "", err
-//    }
-//    return asm, nil
-//}
 
 func (intType Int) Hex() (string, error) {
     b, err := intType.Bytes()
@@ -64,6 +54,7 @@ func (intType Int) Hex() (string, error) {
     }
     return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
+
 
 func (intType Int) Bytes() ([]byte, error) {
     var res []byte
@@ -91,7 +82,6 @@ func (intType Int) Bytes() ([]byte, error) {
             b = append(b, 0x00)
         }
     }
-
     b, err := appendPushdataPrefix(b)
     if err != nil {
         return res, err
@@ -120,7 +110,7 @@ func (boolType Bool) Bytes() ([]byte, error) {
     if boolType.value == true {
         return []byte{0x51}, nil
     }
-   return []byte{0x00}, nil
+    return []byte{0x00}, nil
 }
 
 func (boolType Bool) GetTypeString() string {
@@ -491,4 +481,100 @@ func (structType Struct) GetTypeString() string {
 }
 
 // TODO: Function for creating structs
+
+
+type HashedMap struct {
+    values map[[32]byte][32]byte
+}
+
+func (hashedMapType HashedMap) GetTypeString() string {
+    return "HashedMap"
+}
+
+func (hashedMapType *HashedMap) Set(key ScryptType, val ScryptType) error {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return err
+    }
+    hashVal, err := FlattenSHA256(val)
+    if err != nil {
+        return err
+    }
+    hashedMapType.values[hashKey] = hashVal
+
+    return nil
+}
+
+func (hashedMapType *HashedMap) Delete(key ScryptType) error {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return err
+    }
+    delete(hashedMapType.values, hashKey)
+
+    return nil
+}
+
+func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
+    hashKey, err := FlattenSHA256(key)
+    if err != nil {
+        return -1, err
+    }
+    
+    keysSorted := hashedMapType.GetKeysSorted()
+
+    idx := 0
+    for _, k := range keysSorted {
+        if k == hashKey {
+            return idx, nil
+        }
+        idx++
+    }
+
+    return -1, errors.New(fmt.Sprintf("Key not present in HashedMap: \"%s\"", hashKey))
+}
+
+func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
+    keysAll := make([][32]byte, len(hashedMapType.values))
+    i := 0
+    for k := range hashedMapType.values {
+        keysAll[i] = k
+        i++
+    }
+    
+    sort.SliceStable(keysAll,
+        func(i, j int) bool {
+            a := new(big.Int)
+            b := new(big.Int)
+            a.SetBytes(ReverseByteSlice(keysAll[i][:]))
+            b.SetBytes(ReverseByteSlice(keysAll[j][:]))
+            return a.Cmp(b) > 0
+        })
+
+    return keysAll
+}
+
+func (hashedMapType HashedMap) Hex() (string, error)  {
+    b, err := hashedMapType.Bytes()
+    return string(b), err
+}
+
+func (hashedMapType HashedMap) Bytes() ([]byte, error)  {
+    var buff bytes.Buffer
+
+    keysSorted := hashedMapType.GetKeysSorted()
+    for _, k := range keysSorted {
+        val := hashedMapType.values[k]
+        buff.Write(k[:])
+        buff.Write(val[:])
+    }
+
+    return buff.Bytes(), nil
+}
+
+func NewHashedMap() HashedMap {
+    return HashedMap{
+        values:     make(map[[32]byte][32]byte),
+    }
+}
 

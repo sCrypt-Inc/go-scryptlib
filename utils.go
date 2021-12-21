@@ -3,10 +3,13 @@ package scryptlib
 import (
     "fmt"
     "strings"
+    "bytes"
     "regexp"
     "strconv"
+    "errors"
     "reflect"
     "math/big"
+    "crypto/sha256"
 
     "github.com/libsv/go-bt/v2/bscript"
 )
@@ -203,10 +206,22 @@ func ConstructAliasMap(aliasesDesc []map[string]string) map[string]string {
 }
 
 func CompareScryptVariableTypes(a ScryptType, b ScryptType) bool {
-        typePlaceholder := reflect.TypeOf(a).Name()
-        typeActualParam := reflect.TypeOf(b).Name()
+    typePlaceholder := reflect.TypeOf(a).Name()
+    typeActualParam := reflect.TypeOf(b).Name()
 
-        return typePlaceholder == typeActualParam
+    return typePlaceholder == typeActualParam
+}
+
+func CompareScryptTypeSHA256(a ScryptType, b ScryptType) (bool, error) {
+    hash_a, err := FlattenSHA256(a)
+    if err != nil {
+        return false, err
+    }
+    hash_b, err := FlattenSHA256(b)
+    if err != nil {
+        return false, err
+    }
+    return hash_a == hash_b, nil
 }
 
 func FlattenArray(arr Array) ([]ScryptType) {
@@ -269,3 +284,97 @@ func appendPushdataPrefix(buffer []byte) ([]byte, error) {
     return append(pushDataPrefix, buffer...), nil
 }
 
+// Drops length prefix of serialized sCrypt type.
+func DropLenPrefix(val []byte) ([]byte, error) {
+    if len(val) < 2 {
+        return val, nil
+    }
+
+    firstByte := val[0]
+
+    if firstByte >= 0x01 && firstByte <= 0x4b {
+        return val[1:], nil
+    }
+
+    if firstByte == 0x4c {
+        // OP_PUSHDATA1
+        return val[2:], nil
+    } else if firstByte == 0x4d {
+        // OP_PUSHDATA2
+        return val[3:], nil
+    } else if firstByte == 0x4e {
+        // OP_PUSHDATA4
+        return val[5:], nil
+    }
+
+    return nil, errors.New(fmt.Sprintf("Invalid first byte \"%x\".", firstByte))
+}
+
+// If data is Struct or a list of ScryptTypes, then hash (SHA256) every element of the flattened structure, concat
+// the resulting hashes and hash again into a single hash.
+// If data is a basic sCrypt type, then hash it's byte value.
+func FlattenSHA256(val ScryptType) ([32]byte, error) {
+    var res [32]byte
+    flattened := FlattenData(val)
+
+    if len(flattened) == 1 {
+        valBytes, err := val.StateBytes()
+        if err != nil {
+            return res, err 
+        }
+        valBytes, err = DropLenPrefix(valBytes)
+        if err != nil {
+            return res, err 
+        }
+        if len(valBytes) == 1 && valBytes[0] == 0 {
+            valBytes = make([]byte, 0)
+        }
+        return sha256.Sum256(valBytes), nil
+    }
+
+    var hashesBuff bytes.Buffer
+    for _, e := range flattened {
+        valBytes, err := e.Bytes()
+        if err != nil {
+            return res, err 
+        }
+        if len(valBytes) == 1 && valBytes[0] == 0 {
+            valBytes = make([]byte, 0)
+        }
+        valHash := sha256.Sum256(valBytes)
+        hashesBuff.Write(valHash[:])
+    }
+
+    return sha256.Sum256(hashesBuff.Bytes()), nil
+}
+
+// Turns hierarchical sCrypt type into a single dimensional slice of ScryptType values.
+func FlattenData(val ScryptType) []ScryptType {
+    valType := reflect.TypeOf(val).Name()
+    res := make([]ScryptType, 0)
+    if valType == "Array" {
+        for _, e := range val.(Array).values {
+            res = append(res, FlattenData(e)...)
+        }
+    } else if valType == "Struct" {
+        for _, k := range val.(Struct).keysInOrder {
+            res = append(res, FlattenData(val.(Struct).values[k])...)
+        }
+    } else {
+        res = append(res, val)
+    }
+
+    return res
+}
+
+func ReverseByteSlice(s []byte) []byte {
+    a := make([]byte, len(s))
+    copy(a, s)
+
+    for i := len(a)/2 - 1; i >= 0; i-- {
+        opp := len(a) - 1 - i
+        a[i], a[opp] = a[opp], a[i]
+    }
+
+    return a
+}

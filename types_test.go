@@ -40,3 +40,22 @@ func TestTypesInt(t *testing.T) {
     hex, _ = intObj.Hex()
     assert.Equal(t, "02f380", hex)
 }
+
+func TestTypesHashedMap(t *testing.T) {
+    hm := NewHashedMap()
+    hm.Set(Int{big.NewInt(22)}, Bytes{[]byte{0xf1}})
+    hm.Set(Int{big.NewInt(3)}, Bytes{[]byte{0x99}})
+    hm.Set(Int{big.NewInt(1234)}, Bytes{[]byte{0xf1, 0xff}})
+
+    keyIdx, err := hm.KeyIndex(Int{big.NewInt(1234)})
+    assert.NoError(t, err)
+    assert.Equal(t, 2, keyIdx)
+
+    keyIdx, err = hm.KeyIndex(Int{big.NewInt(22)})
+    assert.NoError(t, err)
+    assert.Equal(t, 1, keyIdx)
+
+    keyIdx, err = hm.KeyIndex(Int{big.NewInt(3)})
+    assert.NoError(t, err)
+    assert.Equal(t, 0, keyIdx)
+}
