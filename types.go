@@ -45,6 +45,10 @@ type Int struct {
 	value *big.Int
 }
 
+func NewInt(val int64) Int {
+	return Int{big.NewInt(val)}
+}
+
 func (intType Int) Hex() (string, error) {
 	b, err := intType.Bytes()
 	if err != nil {
@@ -94,6 +98,10 @@ type Bool struct {
 	value bool
 }
 
+func NewBool(val bool) Bool {
+	return Bool{val}
+}
+
 func (boolType Bool) Hex() (string, error) {
 	b, err := boolType.Bytes()
 	if err != nil {
@@ -115,6 +123,10 @@ func (boolType Bool) GetTypeString() string {
 
 type Bytes struct {
 	value []byte
+}
+
+func NewBytes(val []byte) Bytes {
+	return Bytes{val}
 }
 
 func (bytesType Bytes) Hex() (string, error) {
@@ -142,6 +154,10 @@ type PrivKey struct {
 	value *bec.PrivateKey
 }
 
+func NewPrivKey(val *bec.PrivateKey) PrivKey {
+	return PrivKey{val}
+}
+
 func (privKeyType PrivKey) Hex() (string, error) {
 	b, err := privKeyType.Bytes()
 	if err != nil {
@@ -167,6 +183,10 @@ func (privKeyType PrivKey) GetTypeString() string {
 
 type PubKey struct {
 	value *bec.PublicKey
+}
+
+func NewPubKey(val *bec.PublicKey) PubKey {
+	return PubKey{val}
 }
 
 func (pubKeyType PubKey) Hex() (string, error) {
@@ -271,6 +291,10 @@ type Sha1 struct {
 	value []byte
 }
 
+func NewSha1(val []byte) Sha1 {
+	return Sha1{val}
+}
+
 func (sha1Type Sha1) Hex() (string, error) {
 	b, err := sha1Type.Bytes()
 	if err != nil {
@@ -297,6 +321,10 @@ func (sha1 Sha1) GetTypeString() string {
 type Sha256 struct {
 	// TODO: Should value be fixed size byte array instead?
 	value []byte
+}
+
+func NewSha256(val []byte) Sha256 {
+	return Sha256{val}
 }
 
 func (sha256Type Sha256) Hex() (string, error) {
@@ -326,6 +354,10 @@ type SigHashType struct {
 	value []byte
 }
 
+func NewSighHashType(val []byte) SigHashType {
+	return SigHashType{val}
+}
+
 func (sigHashType SigHashType) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", sigHashType.value)), nil
 }
@@ -340,6 +372,10 @@ func (sigHashType SigHashType) GetTypeString() string {
 
 type SigHashPreimage struct {
 	value []byte
+}
+
+func NewSigHashPreimage(val []byte) SigHashPreimage {
+	return SigHashPreimage{val}
 }
 
 func (sigHashPreimageType SigHashPreimage) Hex() (string, error) {
@@ -369,6 +405,10 @@ type OpCodeType struct {
 	value []byte
 }
 
+func NewOpCodeType(val []byte) OpCodeType {
+	return OpCodeType{val}
+}
+
 func (opCodeType OpCodeType) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", opCodeType.value)), nil
 }
@@ -383,6 +423,10 @@ func (opCodeType OpCodeType) GetTypeString() string {
 
 type Array struct {
 	values []ScryptType
+}
+
+func NewArray(val []ScryptType) Array {
+	return Array{val}
 }
 
 func (arrayType Array) Hex() (string, error) {
