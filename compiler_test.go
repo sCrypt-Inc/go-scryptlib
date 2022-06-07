@@ -16,7 +16,6 @@ func TestCompiler0(t *testing.T) {
 		HexOut:      true,
 		Debug:       true,
 		Desc:        true,
-		Stack:       true,
 		Optimize:    false,
 		CmdArgs:     "",
 		Cwd:         "./",
