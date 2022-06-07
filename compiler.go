@@ -138,7 +138,6 @@ type CompilerWrapper struct {
 	Asm      bool
 	HexOut   bool
 	Debug    bool
-	Stack    bool
 	Optimize bool
 	Ast      bool
 	// If true, write desc file to OutDir.
@@ -828,9 +827,7 @@ func (compilerWrapper *CompilerWrapper) assembleCompilerCommand(contractPathAbs 
 	if compilerWrapper.Debug {
 		cmdBuff.WriteString("--debug ")
 	}
-	if compilerWrapper.Stack {
-		cmdBuff.WriteString("--stack ")
-	}
+
 	if compilerWrapper.Optimize {
 		cmdBuff.WriteString("--optimize ")
 	}
