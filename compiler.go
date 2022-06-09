@@ -41,6 +41,7 @@ type CompilerResult struct {
 	CompilerVersion string                   // Version of the compiler binary used to compile the contract
 	Contract        string                   // Name of the compiled contract
 	Structs         []map[string]interface{} // Struct declarations
+	Libraries       []map[string]interface{} // Library declarations
 	Aliases         []map[string]string      // Aliases used in the contract
 	SourceFile      string                   // URI of the contracts source file
 	AutoTypedVars   []map[string]interface{} // Variables with infered type
@@ -57,7 +58,7 @@ func (compilerResult CompilerResult) ToDesc() map[string]interface{} {
 	res["contract"] = compilerResult.Contract
 	res["md5"] = compilerResult.SourceMD5
 	res["structs"] = compilerResult.Structs
-	res["structs"] = compilerResult.Structs
+	res["library"] = compilerResult.Libraries
 	res["alias"] = compilerResult.Aliases
 	res["abi"] = compilerResult.Abi
 	res["file"] = ""
@@ -109,6 +110,7 @@ type ResultsAst struct {
 	Aliases          []map[string]string
 	Abi              []map[string]interface{}
 	Structs          []map[string]interface{}
+	Libraries        []map[string]interface{}
 	MainContractName string
 }
 
@@ -236,6 +238,7 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 		CompilerVersion: compilerVersion,
 		Contract:        resultsAst.MainContractName,
 		Structs:         resultsAst.Structs,
+		Libraries:       resultsAst.Libraries,
 		Aliases:         resultsAst.Aliases,
 		SourceFile:      fmt.Sprintf("file://%s", contractPath),
 		AutoTypedVars:   resultsAsm.AutoTypedVars,
@@ -399,6 +402,7 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 	staticIntConsts := compilerWrapper.getStaticIntConstDeclarations(&astTree)
 	mainContractName, abi := compilerWrapper.getAbiDeclaration(&srcAstRoot, aliasMap, &staticIntConsts)
 	structs := compilerWrapper.getAstStructDeclarations(&astTree)
+    libraries := compilerWrapper.getAstLibraryDeclarations(&astTree)
 
 	delete(astTree, compilerWrapper.ContractPath)
 	depAsts := astTree
@@ -409,6 +413,7 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 		Aliases:          aliasesDesc,
 		Abi:              abi,
 		Structs:          structs,
+        Libraries:        libraries,
 		MainContractName: mainContractName,
 	}, nil
 }
@@ -609,6 +614,53 @@ func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[st
 	}
 
 	return res
+}
+
+func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[string]interface{}) []map[string]interface{} {
+	res := make([]map[string]interface{}, 0)
+
+	for _, srcElem := range *astTree {
+		srcElem := srcElem.(map[string]interface{})
+
+		for _, contractElem := range srcElem["contracts"].([]interface{}) {
+			contractElem := contractElem.(map[string]interface{})
+
+            if (contractElem["nodeType"] != "Library") { continue }
+
+			name := contractElem["name"].(string)
+            
+			var params []map[string]string
+            val, present := contractElem["constructor"]
+            if (present && val != nil) {
+                constructor := contractElem["constructor"].(map[string]interface{})
+
+			    for _, param := range constructor["params"].([]interface{}) {
+			    	param := param.(map[string]interface{})
+			    	pName := "ctor." + param["name"].(string)
+			    	pType := param["type"].(string)
+			    	params = append(params, map[string]string{"name": pName, "type": pType})
+			    }
+            }
+
+            // TODO: properties (this.x)
+			var properties []map[string]string
+			for _, property := range contractElem["properties"].([]interface{}) {
+			    property := property.(map[string]interface{})
+			    pName := property["name"].(string)
+			    pType := property["type"].(string)
+			    properties = append(properties, map[string]string{"name": pName, "type": pType})
+            }
+
+			toAppend := make(map[string]interface{})
+			toAppend["name"] = name
+			toAppend["params"] = params
+			toAppend["properties"] = properties
+
+			res = append(res, toAppend)
+        }
+    }
+
+    return res
 }
 
 func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface{}) []map[string]string {
