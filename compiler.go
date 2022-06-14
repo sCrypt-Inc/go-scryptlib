@@ -32,6 +32,13 @@ var DebugModeTag = map[string]string{
 	"LOOP_START": "L0",
 }
 
+type BuildType string
+
+const (
+	Debug   BuildType = "debug"
+	Release BuildType = "release"
+)
+
 type CompilerResult struct {
 	Ast             map[string]interface{}   // ASTs from all the compiled source files
 	Asm             []map[string]interface{} // ASM data of the compiled contract
@@ -43,6 +50,7 @@ type CompilerResult struct {
 	Structs         []map[string]interface{} // Struct declarations
 	Libraries       []map[string]interface{} // Library declarations
 	Aliases         []map[string]string      // Aliases used in the contract
+	buildType       BuildType                // buildType
 	SourceFile      string                   // URI of the contracts source file
 	AutoTypedVars   []map[string]interface{} // Variables with infered type
 	SourceMD5       string                   // MD5 hash of the contracts source code
@@ -64,6 +72,7 @@ func (compilerResult CompilerResult) ToDesc() map[string]interface{} {
 	res["file"] = ""
 	res["asm"] = compilerResult.RawAsm
 	res["hex"] = compilerResult.RawHex
+	res["buildType"] = compilerResult.buildType
 	res["sources"] = nil
 	res["sourceMap"] = nil
 	return res
@@ -234,6 +243,7 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 		Asm:             resultsAsm.Asm,
 		DepAst:          resultsAst.DepAst,
 		Abi:             resultsAst.Abi,
+		buildType:       Debug,
 		Warnings:        warnings,
 		CompilerVersion: compilerVersion,
 		Contract:        resultsAst.MainContractName,
