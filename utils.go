@@ -187,11 +187,11 @@ func IsArraySameStructure(array0 Array, array1 Array) bool {
 }
 
 // Construct a map for resolving alias types from the alias section of the contract description file.
-func ConstructAliasMap(aliasesDesc []map[string]string) map[string]string {
+func ConstructAliasMap(aliasesDesc []AliasEntity) map[string]string {
 	aliases := make(map[string]string)
 	for _, item := range aliasesDesc {
-		nameString := item["name"]
-		typeString := item["type"]
+		nameString := item.Name
+		typeString := item.Type
 		aliases[nameString] = typeString
 	}
 	return aliases

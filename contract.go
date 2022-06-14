@@ -56,11 +56,11 @@ type Contract struct {
 	aliases                  map[string]string
 	constructorParams        []functionParam
 	publicFunctions          map[string]publicFunction
-	structTypes              map[string]Struct  // Templates of contracts struct types.
-                                                // Maps struct names to related templates.
-    libraryTypes             map[string]Library // Templates of contracts libraries.
-	executionContext         ExecutionContext
-	contextSet               bool
+	structTypes              map[string]Struct // Templates of contracts struct types.
+	// Maps struct names to related templates.
+	libraryTypes     map[string]Library // Templates of contracts libraries.
+	executionContext ExecutionContext
+	contextSet       bool
 }
 
 // Set values for the contracts constructors parameters.
@@ -374,9 +374,9 @@ func (contract *Contract) GetStructTypeTemplate(structName string) Struct {
 }
 
 func constructAbiPlaceholders(desc map[string]interface{},
-                              structItems map[string]Struct,
-                              libaryItems map[string]Library,
-	                          aliases map[string]string) ([]functionParam, map[string]publicFunction, error) {
+	structItems map[string]Struct,
+	libaryItems map[string]Library,
+	aliases map[string]string) ([]functionParam, map[string]publicFunction, error) {
 	var constructorParams []functionParam
 	publicFunctions := make(map[string]publicFunction)
 
@@ -384,32 +384,32 @@ func constructAbiPlaceholders(desc map[string]interface{},
 	structDescItemsByTypeString := getStructItemsByTypeString(desc)
 	libraryDescItemsByTypeString := getLibraryItemsByTypeString(desc)
 
-	for _, abiItem := range desc["abi"].([]map[string]interface{}) {
+	for _, abiItem := range desc["abi"].([]ABIEntity) {
 
-		abiItemType := abiItem["type"].(string)
-		params := abiItem["params"].([]map[string]interface{})
+		abiItemType := abiItem.Type
+		params := abiItem.Params
 
 		var publicFunctionPlaceholder publicFunction
 		var publicFunctionName string
-		if abiItemType == "function" {
-			publicFunctionName = abiItem["name"].(string)
+		if abiItemType == FUNCTION {
+			publicFunctionName = abiItem.Name
 			publicFunctionPlaceholder = publicFunction{
 				FunctionName: publicFunctionName,
-				Index:        abiItem["index"].(int),
+				Index:        abiItem.Index,
 			}
 		}
 
 		for _, param := range params {
 			var value ScryptType
-			pName := param["name"].(string)
-			pType := param["type"].(string)
+			pName := param.Name
+			pType := param.Type
 
-            structItem, isStructType := structItems[pType]
-            libaryItem, isLibraryType := libaryItems[pType]
+			structItem, isStructType := structItems[pType]
+			libaryItem, isLibraryType := libaryItems[pType]
 
 			if isStructType {
 				value = structItem
-            } else if isLibraryType {
+			} else if isLibraryType {
 				value = libaryItem
 			} else if IsArrayType(pType) {
 				arrVal, err := constructArrayType(pType, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
@@ -433,7 +433,8 @@ func constructAbiPlaceholders(desc map[string]interface{},
 			}
 
 			if abiItemType == "constructor" {
-				placeholder.IsState = param["state"].(bool)
+				//TODO: now store isState in stateProps
+				placeholder.IsState = false
 				constructorParams = append(constructorParams, placeholder)
 			} else {
 				publicFunctionPlaceholder.Params = append(publicFunctionPlaceholder.Params, placeholder)
@@ -448,19 +449,19 @@ func constructAbiPlaceholders(desc map[string]interface{},
 	return constructorParams, publicFunctions, nil
 }
 
-func getStructItemsByTypeString(desc map[string]interface{}) map[string]interface{} {
-	res := make(map[string]interface{})
-	for _, structItem := range desc["structs"].([]map[string]interface{}) {
-		typeStr := structItem["name"].(string)
-		res[typeStr] = structItem
+func getStructItemsByTypeString(desc map[string]interface{}) map[string]StructEntity {
+	res := make(map[string]StructEntity)
+	for _, structItem := range desc["structs"].([]StructEntity) {
+		structType := structItem.Name
+		res[structType] = structItem
 	}
 	return res
 }
 
-func getLibraryItemsByTypeString(desc map[string]interface{}) map[string]interface{} {
-	res := make(map[string]interface{})
-	for _, libraryItem := range desc["library"].([]map[string]interface{}) {
-		typeStr := libraryItem["name"].(string)
+func getLibraryItemsByTypeString(desc map[string]interface{}) map[string]LibraryEntity {
+	res := make(map[string]LibraryEntity)
+	for _, libraryItem := range desc["library"].([]LibraryEntity) {
+		typeStr := libraryItem.Name
 		res[typeStr] = libraryItem
 	}
 	return res
@@ -484,14 +485,13 @@ func getLibraryTypeNames(desc map[string]interface{}) map[string]bool {
 	return res
 }
 
-func constructStructTypeItems(structDescItemsByTypeString map[string]interface{},
-                        libraryDescItemsByTypeString map[string]interface{},
-                        aliases map[string]string) (map[string]Struct, error) {
-    res := make(map[string]Struct)
+func constructStructTypeItems(structDescItemsByTypeString map[string]StructEntity,
+	aliases map[string]string) (map[string]Struct, error) {
+	res := make(map[string]Struct)
 
 	for typeName, typeItem := range structDescItemsByTypeString {
-		typeDescItem := typeItem.(map[string]interface{})
-		typeItem, err := constructStructTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+		typeItem, err := constructStructTypeItem(typeItem, structDescItemsByTypeString, aliases)
+
 		if err != nil {
 			return res, err
 		}
@@ -499,17 +499,16 @@ func constructStructTypeItems(structDescItemsByTypeString map[string]interface{}
 		res[typeName] = typeItem
 	}
 
-    return res, nil
+	return res, nil
 }
 
-func constructLibraryTypeItems(structDescItemsByTypeString map[string]interface{},
-                        libraryDescItemsByTypeString map[string]interface{},
-                        aliases map[string]string) (map[string]Library, error) {
-    res := make(map[string]Library)
+func constructLibraryTypeItems(structDescItemsByTypeString map[string]StructEntity,
+	libraryDescItemsByTypeString map[string]LibraryEntity,
+	aliases map[string]string) (map[string]Library, error) {
+	res := make(map[string]Library)
 
 	for typeName, typeItem := range libraryDescItemsByTypeString {
-		typeDescItem := typeItem.(map[string]interface{})
-		typeItem, err := constructLibraryTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+		typeItem, err := constructLibraryTypeItem(typeItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
 		if err != nil {
 			return res, err
 		}
@@ -517,42 +516,39 @@ func constructLibraryTypeItems(structDescItemsByTypeString map[string]interface{
 		res[typeName] = typeItem
 	}
 
-    return res, nil
+	return res, nil
 }
 
-func constructStructTypeItem(typeDescItem map[string]interface{},
-                       structDescItemsByTypeString map[string]interface{},
-                       libraryDescItemsByTypeString map[string]interface{},
-	                   aliases map[string]string) (Struct, error) {
+func constructStructTypeItem(typeDescItem StructEntity,
+	structDescItemsByTypeString map[string]StructEntity,
+	aliases map[string]string) (Struct, error) {
 
 	var res Struct
 
 	var keysInOrder []string
 	values := make(map[string]ScryptType)
 
-	params := typeDescItem["params"].([]map[string]string)
+	params := typeDescItem.Params
 	for _, param := range params {
-		pName := param["name"]
-		pType := param["type"]
+		pName := param.Name
+		pType := param.Type
 		pTypeResolved := ResolveType(pType, aliases)
 
 		keysInOrder = append(keysInOrder, pName)
 
-        _, isParamStructType := structDescItemsByTypeString[pName]
-        _, isParamLibraryType := libraryDescItemsByTypeString[pName]
+		_, isParamStructType := structDescItemsByTypeString[pName]
 
 		var val ScryptType
 		var err error
 
 		if IsArrayType(pTypeResolved) {
-			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else if isParamStructType {
-			val, err = constructStructTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else if isParamLibraryType {
-			val, err = constructLibraryTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else {
+			emptyDescItemsByTypeString := make(map[string]LibraryEntity)
+			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, emptyDescItemsByTypeString, aliases)
+		} else if isParamStructType {
+			val, err = constructStructTypeItem(typeDescItem, structDescItemsByTypeString, aliases)
+		} else {
 			val, err = createPrimitiveTypeWDefaultVal(pTypeResolved)
-        }
+		}
 
 		if err != nil {
 			return res, err
@@ -561,46 +557,46 @@ func constructStructTypeItem(typeDescItem map[string]interface{},
 		values[pName] = val
 	}
 
-    return Struct{
-        typeName:    typeDescItem["name"].(string),
-        keysInOrder: keysInOrder,
-        values:      values,
-    }, nil
+	return Struct{
+		typeName:    typeDescItem.Name,
+		keysInOrder: keysInOrder,
+		values:      values,
+	}, nil
 }
 
-func constructLibraryTypeItem(typeDescItem map[string]interface{},
-                       structDescItemsByTypeString map[string]interface{},
-                       libraryDescItemsByTypeString map[string]interface{},
-	                   aliases map[string]string) (Library, error) {
+func constructLibraryTypeItem(typeDescItem LibraryEntity,
+	structDescItemsByTypeString map[string]StructEntity,
+	libraryDescItemsByTypeString map[string]LibraryEntity,
+	aliases map[string]string) (Library, error) {
 
 	var res Library
 
 	var keysInOrder []string
 	values := make(map[string]ScryptType)
 
-	params := typeDescItem["params"].([]map[string]string)
+	params := typeDescItem.Params
 	for _, param := range params {
-		pName := param["name"]
-		pType := param["type"]
+		pName := param.Name
+		pType := param.Type
 		pTypeResolved := ResolveType(pType, aliases)
 
 		keysInOrder = append(keysInOrder, pName)
 
-        _, isParamStructType := structDescItemsByTypeString[pName]
-        _, isParamLibraryType := libraryDescItemsByTypeString[pName]
+		structDescItem, isParamStructType := structDescItemsByTypeString[pName]
+		libraryDescItem, isParamLibraryType := libraryDescItemsByTypeString[pName]
 
 		var val ScryptType
 		var err error
 
 		if IsArrayType(pTypeResolved) {
 			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else if isParamStructType {
-			val, err = constructStructTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else if isParamLibraryType {
-			val, err = constructLibraryTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-        } else {
+		} else if isParamStructType {
+			val, err = constructStructTypeItem(structDescItem, structDescItemsByTypeString, aliases)
+		} else if isParamLibraryType {
+			val, err = constructLibraryTypeItem(libraryDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+		} else {
 			val, err = createPrimitiveTypeWDefaultVal(pTypeResolved)
-        }
+		}
 
 		if err != nil {
 			return res, err
@@ -609,22 +605,23 @@ func constructLibraryTypeItem(typeDescItem map[string]interface{},
 		values[pName] = val
 	}
 
-    return Library{
-        typeName:         typeDescItem["name"].(string),
-        paramKeysInOrder: keysInOrder,
-        params:           values,
-    }, nil
+	return Library{
+		typeName:         typeDescItem.Name,
+		paramKeysInOrder: keysInOrder,
+		params:           values,
+	}, nil
 }
 
 func constructArrayType(typeString string,
-                        structDescItemsByTypeString map[string]interface{},
-                        libraryDescItemsByTypeString map[string]interface{},
-	                    aliases map[string]string) (Array, error) {
+	structDescItemsByTypeString map[string]StructEntity,
+	libraryDescItemsByTypeString map[string]LibraryEntity,
+	aliases map[string]string) (Array, error) {
+
 	var res Array
 	typeName, arraySizes := FactorizeArrayTypeString(typeString)
 
-    _, isStructType := structDescItemsByTypeString[typeName]
-    _, isLibraryType := libraryDescItemsByTypeString[typeName]
+	structDescItem, isStructType := structDescItemsByTypeString[typeName]
+	libraryDescItem, isLibraryType := libraryDescItemsByTypeString[typeName]
 
 	var items []ScryptType
 	for dimension := len(arraySizes) - 1; dimension >= 0; dimension-- {
@@ -638,11 +635,9 @@ func constructArrayType(typeString string,
 				var err error
 
 				if isStructType {
-                    typeDescItem := structDescItemsByTypeString[typeName].(map[string]interface{})
-					item, err = constructStructTypeItem(typeDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-                } else if isLibraryType {
-                    typeDescItem := libraryDescItemsByTypeString[typeName].(map[string]interface{})
-					item, err = constructLibraryTypeItem(typeDescItem, libraryDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+					item, err = constructStructTypeItem(structDescItem, structDescItemsByTypeString, aliases)
+				} else if isLibraryType {
+					item, err = constructLibraryTypeItem(libraryDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
 				} else {
 					item, err = createPrimitiveTypeWDefaultVal(typeName)
 				}
@@ -706,33 +701,33 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 	var res Contract
 
 	lockingScriptHexTemplate := desc["hex"].(string)
-	aliases := ConstructAliasMap(desc["alias"].([]map[string]string))
+	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
 
 	structDescItemsByTypeString := getStructItemsByTypeString(desc)
 	libraryDescItemsByTypeString := getLibraryItemsByTypeString(desc)
 
-    structItems, err := constructStructTypeItems(structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+	structItems, err := constructStructTypeItems(structDescItemsByTypeString, aliases)
 	if err != nil {
 		return res, err
 	}
 
-    libaryItems, err := constructLibraryTypeItems(structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+	libaryItems, err := constructLibraryTypeItems(structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
 	if err != nil {
 		return res, err
 	}
 
 	// structTypes and libraryTypes should also contain keys for aliases.
 	// TODO: Fix aliases for concrete vals.
-    for key, val := range aliases {
-        if _, contains := structItems[val]; contains {
-            structItems[key] = structItems[val]
-        }
-    }
-    for key, val := range aliases {
-        if _, contains := libaryItems[val]; contains {
-            libaryItems[key] = libaryItems[val]
-        }
-    }
+	for key, val := range aliases {
+		if _, contains := structItems[val]; contains {
+			structItems[key] = structItems[val]
+		}
+	}
+	for key, val := range aliases {
+		if _, contains := libaryItems[val]; contains {
+			libaryItems[key] = libaryItems[val]
+		}
+	}
 
 	// Initialize constructor parameter placeholders and public functions along its parameter placeholders.
 	constructorParams, publicFunctions, err := constructAbiPlaceholders(desc, structItems, libaryItems, aliases)
@@ -740,13 +735,13 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 		return res, err
 	}
 
-	return Contract {
+	return Contract{
 		lockingScriptHexTemplate: lockingScriptHexTemplate,
 		aliases:                  aliases,
 		constructorParams:        constructorParams,
 		publicFunctions:          publicFunctions,
 		structTypes:              structItems,
-        libraryTypes:             libaryItems,
+		libraryTypes:             libaryItems,
 		contextSet:               false,
 	}, nil
 }
