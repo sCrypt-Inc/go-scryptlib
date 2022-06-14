@@ -402,7 +402,7 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 	staticIntConsts := compilerWrapper.getStaticIntConstDeclarations(&astTree)
 	mainContractName, abi := compilerWrapper.getAbiDeclaration(&srcAstRoot, aliasMap, &staticIntConsts)
 	structs := compilerWrapper.getAstStructDeclarations(&astTree)
-    libraries := compilerWrapper.getAstLibraryDeclarations(&astTree)
+	libraries := compilerWrapper.getAstLibraryDeclarations(&astTree)
 
 	delete(astTree, compilerWrapper.ContractPath)
 	depAsts := astTree
@@ -413,7 +413,7 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 		Aliases:          aliasesDesc,
 		Abi:              abi,
 		Structs:          structs,
-        Libraries:        libraries,
+		Libraries:        libraries,
 		MainContractName: mainContractName,
 	}, nil
 }
@@ -625,30 +625,32 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 		for _, contractElem := range srcElem["contracts"].([]interface{}) {
 			contractElem := contractElem.(map[string]interface{})
 
-            if (contractElem["nodeType"] != "Library") { continue }
+			if contractElem["nodeType"] != "Library" {
+				continue
+			}
 
 			name := contractElem["name"].(string)
-            
-			var params []map[string]string
-            val, present := contractElem["constructor"]
-            if (present && val != nil) {
-                constructor := contractElem["constructor"].(map[string]interface{})
 
-			    for _, param := range constructor["params"].([]interface{}) {
-			    	param := param.(map[string]interface{})
-			    	pName := "ctor." + param["name"].(string)
-			    	pType := param["type"].(string)
-			    	params = append(params, map[string]string{"name": pName, "type": pType})
-			    }
-            }
+			var params []map[string]string
+			val, present := contractElem["constructor"]
+			if present && val != nil {
+				constructor := contractElem["constructor"].(map[string]interface{})
+
+				for _, param := range constructor["params"].([]interface{}) {
+					param := param.(map[string]interface{})
+					pName := "ctor." + param["name"].(string)
+					pType := param["type"].(string)
+					params = append(params, map[string]string{"name": pName, "type": pType})
+				}
+			}
 
 			var properties []map[string]string
 			for _, property := range contractElem["properties"].([]interface{}) {
-			    property := property.(map[string]interface{})
-			    pName := property["name"].(string)
-			    pType := property["type"].(string)
-			    properties = append(properties, map[string]string{"name": pName, "type": pType})
-            }
+				property := property.(map[string]interface{})
+				pName := property["name"].(string)
+				pType := property["type"].(string)
+				properties = append(properties, map[string]string{"name": pName, "type": pType})
+			}
 
 			toAppend := make(map[string]interface{})
 			toAppend["name"] = name
@@ -656,10 +658,10 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 			toAppend["properties"] = properties
 
 			res = append(res, toAppend)
-        }
-    }
+		}
+	}
 
-    return res
+	return res
 }
 
 func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface{}) []map[string]string {
