@@ -64,10 +64,10 @@ func IsArrayType(typeStr string) bool {
 
 // Check if string is of a struct type.
 // e.g. "struct Point {}"
-func IsStructType(typeStr string) bool {
-	match, _ := regexp.MatchString(`^struct\s(\w+)\s\{\}$`, typeStr)
-	return match
-}
+//func IsStructType(typeStr string) bool {
+//	match, _ := regexp.MatchString(`^struct\s(\w+)\s\{\}$`, typeStr)
+//	return match
+//}
 
 // Check if string is a basic sCrypt type.
 // e.g. "int", "bool", "bytes" ...
@@ -78,14 +78,14 @@ func IsBasicScryptType(typeStr string) bool {
 
 // Returns struct name from type string.
 // e.g.: 'struct ST1 {}[2][2][2]' -> 'ST1'.
-func GetStructNameByType(typeName string) string {
-	r := regexp.MustCompile(`^struct\s(\w+)\s\{\}.*$`)
-	match := r.FindStringSubmatch(typeName)
-	if match != nil {
-		return match[1]
-	}
-	return ""
-}
+//func GetStructNameByType(typeName string) string {
+//	r := regexp.MustCompile(`^struct\s(\w+)\s\{\}.*$`)
+//	match := r.FindStringSubmatch(typeName)
+//	if match != nil {
+//		return match[1]
+//	}
+//	return ""
+//}
 
 func ResolveType(typeStr string, aliases map[string]string) string {
 	if IsArrayType(typeStr) {
@@ -93,19 +93,12 @@ func ResolveType(typeStr string, aliases map[string]string) string {
 		return ToLiteralArrayTypeStr(ResolveType(typeName, aliases), arraySizes)
 	}
 
-	if IsStructType(typeStr) {
-		return ResolveType(GetStructNameByType(typeStr), aliases)
-	}
-
 	resolvedType, ok := aliases[typeStr]
 	if ok {
 		return ResolveType(resolvedType, aliases)
 	}
 
-	if BASIC_SCRYPT_TYPES[typeStr] {
-		return typeStr
-	}
-	return fmt.Sprintf("struct %s {}", typeStr)
+	return typeStr
 }
 
 func EvenHexStr(hexStr string) string {

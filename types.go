@@ -522,6 +522,58 @@ func (structType Struct) GetTypeString() string {
 
 // TODO: Function for creating structs
 
+type Library struct {
+	typeName         string
+	paramKeysInOrder []string
+	params           map[string]ScryptType
+	properties       map[string]ScryptType
+}
+
+func (libraryType Library) Hex() (string, error) {
+	var b strings.Builder
+	for _, key := range libraryType.paramKeysInOrder {
+		elem := libraryType.params[key]
+		hex, err := elem.Hex()
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(hex)
+	}
+	return b.String(), nil
+}
+
+func (libraryType Library) Bytes() ([]byte, error) {
+	var res []byte
+	var buff bytes.Buffer
+	for _, key := range libraryType.paramKeysInOrder {
+		elem := libraryType.params[key]
+		b, err := elem.Bytes()
+		if err != nil {
+			return res, err
+		}
+		buff.Write(b)
+	}
+	return buff.Bytes(), nil
+}
+
+func (libraryType *Library) UpdateValue(paramName string, newVal ScryptType) {
+	// TODO: Is there a more efficient way to do value updates?
+	newParams := make(map[string]ScryptType)
+	for key, val := range libraryType.params {
+		if key == paramName {
+			newParams[key] = newVal
+		} else {
+			newParams[key] = val
+		}
+	}
+	libraryType.params = newParams
+}
+
+func (libraryType Library) GetTypeString() string {
+	return libraryType.typeName
+}
+
+
 type HashedMap struct {
 	values map[[32]byte][32]byte
 }

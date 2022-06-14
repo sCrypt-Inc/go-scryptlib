@@ -1,6 +1,7 @@
 package scryptlib
 
 import (
+    "fmt"
 	"encoding/hex"
 	"math/big"
 	"testing"
@@ -433,3 +434,73 @@ func TestContractNestedStructArr(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
 }
+
+func TestContractLibAsProperty(t *testing.T) {
+
+	source := `
+        library L {
+          private int x;
+        
+          constructor(int a, int b) {
+            this.x = a + b;
+          }
+          function f() : int {
+            return this.x;
+          }
+        }
+        
+        
+        contract Test {
+          private int x;
+          L l;
+        
+          public function unlock(int x) {
+            require(this.l.f() == this.x + x);
+            require(true);
+          }
+        }
+        `
+	compilerResult, err := compilerWrapper.CompileContractString(source)
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	libAsPropertyTest, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+    fmt.Println(libAsPropertyTest)
+
+}
+
+// TODO:
+//func TestContractGenericsTest(t *testing.T) {
+//
+//	source := `
+//        contract GenericsTest {
+//            public function add2Set(SortedItem<int> val) {
+//                HashedSet<int> set = new HashedSet(b'');
+//                require(set.add(val));
+//                require(set.has(val));
+//                require(true);
+//            }
+//            public function add2Map(SortedItem<int> key, int val) {
+//                HashedMap<int, int> map = new HashedMap(b'');
+//                require(map.set(key, val));
+//                require(map.canGet(key, val));
+//                require(true);
+//            }
+//        }
+//    `
+//
+//	compilerResult, err := compilerWrapper.CompileContractString(source)
+//	assert.NoError(t, err)
+//
+//	desc, err := compilerResult.ToDescWSourceMap()
+//	assert.NoError(t, err)
+//
+//	hashedMapSetTest, err := NewContractFromDesc(desc)
+//	assert.NoError(t, err)
+//
+//    fmt.Println(hashedMapSetTest)
+//}

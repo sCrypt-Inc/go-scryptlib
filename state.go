@@ -53,8 +53,6 @@ func (intType Int) StateBytes() ([]byte, error) {
 		return res, err
 	}
 	return b, nil
-
-	return item, nil
 }
 
 func (boolType Bool) StateHex() (string, error) {
@@ -159,6 +157,14 @@ func (structType Struct) StateHex() (string, error) {
 
 func (structType Struct) StateBytes() ([]byte, error) {
 	return structType.Bytes()
+}
+
+func (libraryType Library) StateHex() (string, error) {
+	return libraryType.Hex()
+}
+
+func (libraryType Library) StateBytes() ([]byte, error) {
+	return libraryType.Bytes()
 }
 
 func (hashedMapType HashedMap) StateHex() (string, error) {

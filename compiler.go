@@ -642,7 +642,6 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 			    }
             }
 
-            // TODO: properties (this.x)
 			var properties []map[string]string
 			for _, property := range contractElem["properties"].([]interface{}) {
 			    property := property.(map[string]interface{})
