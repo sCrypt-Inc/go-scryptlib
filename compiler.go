@@ -699,7 +699,7 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 
 				for _, param := range constructor["params"].([]interface{}) {
 					param := param.(map[string]interface{})
-					pName := "ctor." + param["name"].(string)
+					pName := param["name"].(string)
 					pType := param["type"].(string)
 					params = append(params, ParamEntity{Name: pName, Type: pType})
 				}

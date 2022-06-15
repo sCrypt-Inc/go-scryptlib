@@ -1,7 +1,6 @@
 package scryptlib
 
 import (
-    "fmt"
 	"encoding/hex"
 	"math/big"
 	"testing"
@@ -469,7 +468,27 @@ func TestContractLibAsProperty(t *testing.T) {
 	libAsPropertyTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
-    fmt.Println(libAsPropertyTest)
+	l := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	l.UpdateValue("a", Int{big.NewInt(1)})
+	l.UpdateValue("b", Int{big.NewInt(2)})
+
+	constructorParams := map[string]ScryptType{
+		"x": Int{big.NewInt(1)},
+		"l": l,
+	}
+
+	err = libAsPropertyTest.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x": Int{big.NewInt(2)},
+	}
+	err = libAsPropertyTest.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := libAsPropertyTest.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
 
 }
 

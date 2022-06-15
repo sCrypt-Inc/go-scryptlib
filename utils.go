@@ -157,6 +157,72 @@ func IsStructsSameStructure(struct0 Struct, struct1 Struct) bool {
 	return true
 }
 
+// Returns true if the passed Library sCrypt types are of the same structure.
+// Concrete values are not checked! It only recursively goes through Array , Library, Struct types.
+func IsLibrarySameStructure(lib0 Library, lib1 Library) bool {
+	if len(lib0.paramKeysInOrder) != len(lib1.paramKeysInOrder) {
+		return false
+	}
+	if len(lib0.params) != len(lib1.params) {
+		return false
+	}
+
+	for i, key := range lib0.paramKeysInOrder {
+		// Check key order.
+		if lib1.paramKeysInOrder[i] != key {
+			return false
+		}
+
+		// Check values.
+		type0 := reflect.TypeOf(lib0.params[key]).Name()
+		type1 := reflect.TypeOf(lib1.params[key]).Name()
+		if type0 != type1 {
+			return false
+		}
+
+		// Go deeper if struct or array type.
+		if type0 == "Struct" {
+			return IsStructsSameStructure(lib0.params[key].(Struct), lib1.params[key].(Struct))
+		} else if type0 == "Library" {
+			return IsLibrarySameStructure(lib0.params[key].(Library), lib1.params[key].(Library))
+		} else if type0 == "Array" {
+			return IsArraySameStructure(lib1.params[key].(Array), lib1.params[key].(Array))
+		}
+	}
+
+	if len(lib0.propertyKeysInOrder) != len(lib1.propertyKeysInOrder) {
+		return false
+	}
+	if len(lib0.properties) != len(lib1.properties) {
+		return false
+	}
+
+	for i, key := range lib0.propertyKeysInOrder {
+		// Check key order.
+		if lib1.propertyKeysInOrder[i] != key {
+			return false
+		}
+
+		// Check values.
+		type0 := reflect.TypeOf(lib0.properties[key]).Name()
+		type1 := reflect.TypeOf(lib1.properties[key]).Name()
+		if type0 != type1 {
+			return false
+		}
+
+		// Go deeper if struct or array type.
+		if type0 == "Struct" {
+			return IsStructsSameStructure(lib0.properties[key].(Struct), lib1.properties[key].(Struct))
+		} else if type0 == "Library" {
+			return IsLibrarySameStructure(lib0.properties[key].(Library), lib1.properties[key].(Library))
+		} else if type0 == "Array" {
+			return IsArraySameStructure(lib1.properties[key].(Array), lib1.properties[key].(Array))
+		}
+	}
+
+	return true
+}
+
 // Returns true if the passed Array sCrypt types are of the same structure.
 // Concrete values are not checked! It only recursively goes through Array and Struct types.
 func IsArraySameStructure(array0 Array, array1 Array) bool {

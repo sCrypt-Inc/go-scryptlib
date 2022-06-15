@@ -198,7 +198,10 @@ func (pubKeyType PubKey) Hex() (string, error) {
 }
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
-	var res []byte
+	res := make([]byte, 0)
+	if pubKeyType.value == nil {
+		return res, nil
+	}
 	b := pubKeyType.value.SerialiseCompressed()
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
@@ -523,10 +526,11 @@ func (structType Struct) GetTypeString() string {
 // TODO: Function for creating structs
 
 type Library struct {
-	typeName         string
-	paramKeysInOrder []string
-	params           map[string]ScryptType
-	properties       map[string]ScryptType
+	typeName            string
+	paramKeysInOrder    []string
+	params              map[string]ScryptType
+	propertyKeysInOrder []string
+	properties          map[string]ScryptType
 }
 
 func (libraryType Library) Hex() (string, error) {
@@ -569,10 +573,22 @@ func (libraryType *Library) UpdateValue(paramName string, newVal ScryptType) {
 	libraryType.params = newParams
 }
 
+func (libraryType *Library) UpdatePropertyValue(propertyName string, newVal ScryptType) {
+	// TODO: Is there a more efficient way to do value updates?
+	newProperties := make(map[string]ScryptType)
+	for key, val := range libraryType.properties {
+		if key == propertyName {
+			newProperties[key] = newVal
+		} else {
+			newProperties[key] = val
+		}
+	}
+	libraryType.properties = newProperties
+}
+
 func (libraryType Library) GetTypeString() string {
 	return libraryType.typeName
 }
-
 
 type HashedMap struct {
 	values map[[32]byte][32]byte
