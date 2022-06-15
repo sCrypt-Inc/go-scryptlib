@@ -429,7 +429,7 @@ func TestContractNestedStructArr(t *testing.T) {
 	err = nestedStructs.SetPublicFunctionParams("unlock", unlockParams)
 	assert.NoError(t, err)
 
-	success, err := nestedStructs.EvaluatePublicFunction("transfer")
+	success, err := nestedStructs.EvaluatePublicFunction("unlock")
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
 }
