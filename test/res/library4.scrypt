@@ -1,0 +1,48 @@
+struct ST {
+  int x;
+}
+library L1 {
+  int x;
+  constructor(int a, int b) {
+    this.x = a + b;
+  }
+  function f() : int {
+    return this.x;
+  }
+}
+
+library L2 {
+  ST[1] x;
+
+  function f() : int {
+    return this.x[0].x;
+  }
+}
+
+library L3 {
+  L1 l1;
+  L2 l2;
+
+  function f() : int {
+    return this.l1.f() + this.l2.f();
+  }
+}
+
+library L4 {
+  L3 l3;
+  constructor(L3 l3) {
+    this.l3 = l3;
+  }
+
+  function f() : int {
+    return this.l3.f();
+  }
+}
+
+contract Test {
+  L4 l4;
+
+  public function unlock(int x) {
+    require(this.l4.f() == x);
+  }
+}
