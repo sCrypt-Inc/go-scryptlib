@@ -533,6 +533,15 @@ type Library struct {
 	properties          map[string]ScryptType
 }
 
+func (libraryType Library) ctor() bool {
+	for _, key := range libraryType.paramKeysInOrder {
+		if strings.HasPrefix(key, "ctor.") {
+			return true
+		}
+	}
+	return false
+}
+
 func (libraryType Library) Hex() (string, error) {
 	var b strings.Builder
 	for _, key := range libraryType.paramKeysInOrder {
@@ -562,6 +571,10 @@ func (libraryType Library) Bytes() ([]byte, error) {
 
 func (libraryType *Library) UpdateValue(paramName string, newVal ScryptType) {
 	// TODO: Is there a more efficient way to do value updates?
+
+	if libraryType.ctor() {
+		paramName = "ctor." + paramName
+	}
 	newParams := make(map[string]ScryptType)
 	for key, val := range libraryType.params {
 		if key == paramName {

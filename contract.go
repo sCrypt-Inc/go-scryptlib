@@ -626,8 +626,8 @@ func constructParamsTypeItem(params []ParamEntity,
 		keys = append(keys, pName)
 		pTypeResolved := ResolveType(pType, aliases)
 
-		structDescItem, isParamStructType := structDescItemsByTypeString[pName]
-		libraryDescItem, isParamLibraryType := libraryDescItemsByTypeString[pName]
+		structDescItem, isParamStructType := structDescItemsByTypeString[pTypeResolved]
+		libraryDescItem, isParamLibraryType := libraryDescItemsByTypeString[pTypeResolved]
 
 		var val ScryptType
 		var err error
@@ -660,7 +660,13 @@ func constructLibraryTypeItem(typeDescItem LibraryEntity,
 
 	var res Library
 
-	paramsKeys, params, err := constructParamsTypeItem(typeDescItem.Params,
+	Params := typeDescItem.Params
+
+	// without constructor
+	if len(Params) == 0 && len(typeDescItem.Properties) > 0 {
+		Params = typeDescItem.Properties
+	}
+	paramsKeys, params, err := constructParamsTypeItem(Params,
 		structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
 
 	if err != nil {
@@ -869,9 +875,7 @@ func (contract *Contract) substituteParamInTemplate(lockingScriptHex string, ele
 
 func (contract *Contract) substituteArrayParamInTemplate(lockingScriptHex string, arr Array, paramName string) (string, error) {
 	elems := FlattenArray(arr)
-	elemTypeName, sizes := FactorizeArrayTypeString(arr.GetTypeString())
-	areElemsBasicScryptTypes := IsBasicScryptType(elemTypeName)
-
+	_, sizes := FactorizeArrayTypeString(arr.GetTypeString())
 	for i := 0; i < len(elems); i++ {
 		elem := elems[i]
 
@@ -892,19 +896,35 @@ func (contract *Contract) substituteArrayParamInTemplate(lockingScriptHex string
 			sb.WriteString(fmt.Sprintf("[%d]", index))
 		}
 		toReplace := fmt.Sprintf("%s%s", paramName, sb.String())
-		if areElemsBasicScryptTypes {
+
+		switch reflect.TypeOf(elem).Name() {
+		case "Struct":
+			res, err := contract.substituteStructParamInTemplate(lockingScriptHex, elem.(Struct), toReplace)
+
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		case "Library":
+			res, err := contract.substituteLibraryParamInTemplate(lockingScriptHex, elem.(Library), toReplace)
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		case "Array":
+			arr := elem.(Array)
+			res, err := contract.substituteArrayParamInTemplate(lockingScriptHex, arr, toReplace)
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		default:
+
 			elemHex, err := elem.Hex()
 			if err != nil {
 				return "", err
 			}
 			lockingScriptHex = strings.Replace(lockingScriptHex, "<"+toReplace+">", elemHex, 1)
-		} else {
-			// Structs.
-			var err error
-			lockingScriptHex, err = contract.substituteStructParamInTemplate(lockingScriptHex, elem.(Struct), toReplace)
-			if err != nil {
-				return "", err
-			}
 		}
 	}
 
@@ -916,18 +936,28 @@ func (contract *Contract) substituteStructParamInTemplate(lockingScriptHex strin
 		toReplace := fmt.Sprintf("%s.%s", paramName, key)
 		val := structItem.values[key]
 
-		if IsArrayType(val.GetTypeString()) {
-			res, err := contract.substituteArrayParamInTemplate(lockingScriptHex, val.(Array), toReplace)
+		switch reflect.TypeOf(val).Name() {
+		case "Struct":
+			res, err := contract.substituteStructParamInTemplate(lockingScriptHex, val.(Struct), toReplace)
+
 			if err != nil {
-				return "", err
+				return lockingScriptHex, nil
 			}
 			lockingScriptHex = res
-		} else {
-			valHex, err := val.Hex()
+		case "Array":
+			arr := val.(Array)
+			res, err := contract.substituteArrayParamInTemplate(lockingScriptHex, arr, toReplace)
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		default:
+
+			elemHex, err := val.Hex()
 			if err != nil {
 				return "", err
 			}
-			lockingScriptHex = strings.Replace(lockingScriptHex, "<"+toReplace+">", valHex, 1)
+			lockingScriptHex = strings.Replace(lockingScriptHex, "<"+toReplace+">", elemHex, 1)
 		}
 	}
 
@@ -936,24 +966,41 @@ func (contract *Contract) substituteStructParamInTemplate(lockingScriptHex strin
 
 func (contract *Contract) substituteLibraryParamInTemplate(lockingScriptHex string, libraryItem Library, paramName string) (string, error) {
 	for _, key := range libraryItem.paramKeysInOrder {
-		toReplace := fmt.Sprintf("%s.ctor.%s", paramName, key)
+
 		val := libraryItem.params[key]
 
-		t := val.GetTypeString()
+		toReplace := fmt.Sprintf("%s.%s", paramName, key)
 
-		if IsArrayType(t) {
-			res, err := contract.substituteArrayParamInTemplate(lockingScriptHex, val.(Array), toReplace)
+		switch reflect.TypeOf(val).Name() {
+		case "Struct":
+			res, err := contract.substituteStructParamInTemplate(lockingScriptHex, val.(Struct), toReplace)
+
 			if err != nil {
-				return "", err
+				return lockingScriptHex, nil
 			}
 			lockingScriptHex = res
-		} else {
-			valHex, err := val.Hex()
+		case "Library":
+			res, err := contract.substituteLibraryParamInTemplate(lockingScriptHex, val.(Library), toReplace)
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		case "Array":
+			arr := val.(Array)
+			res, err := contract.substituteArrayParamInTemplate(lockingScriptHex, arr, toReplace)
+			if err != nil {
+				return lockingScriptHex, nil
+			}
+			lockingScriptHex = res
+		default:
+
+			elemHex, err := val.Hex()
 			if err != nil {
 				return "", err
 			}
-			lockingScriptHex = strings.Replace(lockingScriptHex, "<"+toReplace+">", valHex, 1)
+			lockingScriptHex = strings.Replace(lockingScriptHex, "<"+toReplace+">", elemHex, 1)
 		}
+
 	}
 
 	return lockingScriptHex, nil

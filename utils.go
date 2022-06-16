@@ -58,7 +58,7 @@ func ToLiteralArrayTypeInt(typeName string, arraySizes []int) string {
 // Check if string is of an array type.
 // e.g. "int[2]" or "int[N][3]"
 func IsArrayType(typeStr string) bool {
-	match, _ := regexp.MatchString(`^\w[\w.\s{}]+(\[[\w.]+\])+$`, typeStr)
+	match, _ := regexp.MatchString(`^(.+)(\[[\w.]+\])+$`, typeStr)
 	return match
 }
 

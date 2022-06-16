@@ -492,6 +492,231 @@ func TestContractLibAsProperty(t *testing.T) {
 
 }
 
+func TestContractLibAsPropertyWithOutConstructor(t *testing.T) {
+
+	source := `
+        library L {
+          private int x;
+        
+          function f() : int {
+            return this.x;
+          }
+        }
+
+        contract Test {
+          private int x;
+          L l;
+        
+          public function unlock(int x) {
+            require(this.l.f() == this.x + x);
+            require(true);
+          }
+        }
+        `
+	compilerResult, err := compilerWrapper.CompileContractString(source)
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	libAsPropertyTest, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	l := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	l.UpdateValue("x", Int{big.NewInt(2)})
+
+	constructorParams := map[string]ScryptType{
+		"x": Int{big.NewInt(1)},
+		"l": l,
+	}
+
+	err = libAsPropertyTest.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x": Int{big.NewInt(1)},
+	}
+	err = libAsPropertyTest.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := libAsPropertyTest.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+}
+
+func TestContractArray(t *testing.T) {
+
+	source := `
+        contract TestArray {
+          int[3] x;
+
+          public function unlock(int[3] x) {
+            require(this.x == x);
+          }
+        }
+    `
+	compilerResult, err := compilerWrapper.CompileContractString(source)
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	testArray, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	a := [3]Int{{big.NewInt(1)}, {big.NewInt(2)}, {big.NewInt(3)}}
+
+	b := make([]ScryptType, 3)
+
+	for i := 0; i < 3; i++ {
+		b[i] = a[i]
+	}
+
+	constructorParams := map[string]ScryptType{
+		"x": Array{b},
+	}
+
+	err = testArray.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x": Array{b},
+	}
+	err = testArray.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := testArray.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+}
+
+func TestLibrary1(t *testing.T) {
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library1.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	library1, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	_, err = library1.GetLockingScript()
+
+	assert.NoError(t, err)
+
+	l := library1.GetLibraryTypeTemplate("L")
+
+	l.UpdateValue("a", Int{big.NewInt(1)})
+	l.UpdateValue("b", Int{big.NewInt(2)})
+
+	l1 := library1.GetLibraryTypeTemplate("L1")
+	l1.UpdateValue("x", Int{big.NewInt(1)})
+	l1.UpdateValue("l", Array{[]ScryptType{l, l}})
+
+	constructorParams := map[string]ScryptType{
+		"x":  Int{big.NewInt(1)},
+		"l1": l1,
+	}
+
+	err = library1.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x": Int{big.NewInt(5)},
+	}
+	err = library1.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := library1.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestLibrary2(t *testing.T) {
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library2.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	library2, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	_, err = library2.GetLockingScript()
+
+	assert.NoError(t, err)
+
+	st := library2.GetStructTypeTemplate("ST")
+
+	st.UpdateValue("a", Array{[]ScryptType{Int{big.NewInt(4)}, Int{big.NewInt(5)}}})
+	st.UpdateValue("b", Bool{false})
+	st.UpdateValue("c", Bytes{[]byte{0x01, 0xef, 0x02}})
+	l := library2.GetLibraryTypeTemplate("L")
+
+	l.UpdateValue("st", st)
+
+	constructorParams := map[string]ScryptType{
+		"l": l,
+	}
+
+	err = library2.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"st": st,
+	}
+	err = library2.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := library2.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestLibrary3(t *testing.T) {
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library3.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	library3, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	_, err = library3.GetLockingScript()
+
+	assert.NoError(t, err)
+
+	l := library3.GetLibraryTypeTemplate("L")
+
+	l.UpdateValue("a", Int{big.NewInt(1)})
+	l.UpdateValue("b", Int{big.NewInt(2)})
+
+	l1 := library3.GetLibraryTypeTemplate("L1")
+
+	l1.UpdateValue("xx", l)
+
+	constructorParams := map[string]ScryptType{
+		"l1": l1,
+		"x":  Int{big.NewInt(1)},
+	}
+
+	err = library3.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x": Int{big.NewInt(2)},
+	}
+	err = library3.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := library3.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
 // TODO:
 //func TestContractGenericsTest(t *testing.T) {
 //

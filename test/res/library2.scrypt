@@ -1,0 +1,44 @@
+struct ST {
+  int[2] a;
+  bool b;
+  bytes c;
+}
+
+library L {
+  ST st;
+
+  function f() : ST {
+    return this.st;
+  }
+
+  function set(ST st) : L {
+    this.st = st;
+    return this;
+  }
+}
+
+contract Test {
+  L l;
+
+  public function unlock(ST st) {
+    ST ss = { [999, 1010101], false, b'0f0f0f0a0a' };
+    require(new L(ss).f() != st);
+    require(this.l.f() == st);
+    require(true);
+  }
+
+  public function unlock1(ST st) {
+    ST ss = { [999, 1010101], false, b'0f0f0f0a0a' };
+    require(this.l.f() == st);
+    require(this.l.set(ss).f() == ss);
+    require(true);
+  }
+
+  public function unlock2(ST st) {
+    ST ss = { [9991, 221010101], false, b'0f0f0f0a0aea' };
+    L l = new L(st);
+    require(l.f() == st);
+    require(l.set(ss).f() == ss);
+    require(true);
+  }
+}

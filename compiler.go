@@ -696,16 +696,21 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 			val, present := contractElem["constructor"]
 			if present && val != nil {
 				constructor := contractElem["constructor"].(map[string]interface{})
-
 				for _, param := range constructor["params"].([]interface{}) {
 					param := param.(map[string]interface{})
-					pName := param["name"].(string)
+					pName := "ctor." + param["name"].(string)
 					pType := param["type"].(string)
+					params = append(params, ParamEntity{Name: pName, Type: pType})
+				}
+			} else {
+				for _, property := range contractElem["properties"].([]interface{}) {
+					property := property.(map[string]interface{})
+					pName := property["name"].(string)
+					pType := property["type"].(string)
 					params = append(params, ParamEntity{Name: pName, Type: pType})
 				}
 			}
 
-			// TODO: properties (this.x)
 			properties := make([]ParamEntity, 0)
 			for _, property := range contractElem["properties"].([]interface{}) {
 				property := property.(map[string]interface{})
