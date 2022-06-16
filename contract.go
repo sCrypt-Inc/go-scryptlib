@@ -57,7 +57,9 @@ type ExecutionContext struct {
 }
 
 type Contract struct {
+	name                     string
 	lockingScriptHexTemplate string
+	dataPart                 string
 	aliases                  map[string]string
 	constructorParams        []functionParam
 	stateProps               []StateProp
@@ -126,7 +128,11 @@ func (contract *Contract) SetConstructorParams(params map[string]ScryptType) err
 // Set values for a specific public function parameters.
 // The value of "params" must be a map, that maps a public function name (string) to an ScryptType object.
 func (contract *Contract) SetPublicFunctionParams(functionName string, params map[string]ScryptType) error {
-	function := contract.publicFunctions[functionName]
+	function, exist := contract.publicFunctions[functionName]
+
+	if !exist {
+		return fmt.Errorf("contract %s does't have function  \"%s\"", contract.name, functionName)
+	}
 
 	if len(params) != len(function.Params) {
 		errMsg := fmt.Sprintf("Passed %d parameter values to function \"%s\", but %d expected.",
@@ -242,7 +248,11 @@ func (contract *Contract) GetUnlockingScript(functionName string) (*bscript.Scri
 	var res *bscript.Script
 	var sb strings.Builder
 
-	publicFunction := contract.publicFunctions[functionName]
+	publicFunction, exist := contract.publicFunctions[functionName]
+
+	if !exist {
+		return res, fmt.Errorf("contract %s does't have function  \"%s\"", contract.name, functionName)
+	}
 
 	for _, param := range publicFunction.Params {
 		paramHex, err := param.Value.Hex()
@@ -285,7 +295,28 @@ func (contract *Contract) GetLockingScript() (*bscript.Script, error) {
 
 	if dataPart != "" {
 		// Code and data part are seperated by OP_RETURN.
-		res, err = bscript.NewFromHexString(codePart + "6a" + dataPart)
+		res, err = bscript.NewFromHexString(codePart + dataPart)
+	} else {
+		res, err = bscript.NewFromHexString(codePart)
+	}
+	if err != nil {
+		return res, err
+	}
+
+	return res, nil
+}
+
+func (contract *Contract) GetNewLockingScript(dataPart string) (*bscript.Script, error) {
+	var res *bscript.Script
+
+	codePart, err := contract.GetCodePart()
+	if err != nil {
+		return res, err
+	}
+
+	if dataPart != "" {
+		// Code and data part are seperated by OP_RETURN.
+		res, err = bscript.NewFromHexString(codePart + dataPart)
 	} else {
 		res, err = bscript.NewFromHexString(codePart)
 	}
@@ -318,10 +349,14 @@ func (contract *Contract) GetCodePart() (string, error) {
 		}
 	}
 
+	if len(contract.stateProps) > 0 || contract.dataPart != "" {
+		return lockingScriptHex + "6a", nil
+	}
+
 	return lockingScriptHex, nil
 }
 
-func (contract *Contract) GetDataPart() (string, error) {
+func (contract *Contract) GetStates() (string, error) {
 	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
 	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
 
@@ -345,11 +380,25 @@ func (contract *Contract) GetDataPart() (string, error) {
 		sizeLE := make([]byte, 4)
 		binary.LittleEndian.PutUint32(sizeLE, sbLen)
 		sb.WriteString(fmt.Sprintf("%x", sizeLE))
-
 		sb.WriteString(fmt.Sprintf("%02x", contractStateVersion))
 	}
 
 	return sb.String(), nil
+}
+
+func (contract *Contract) GetDataPart() (string, error) {
+	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
+	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
+
+	if len(contract.stateProps) > 0 {
+		return contract.GetStates()
+	}
+
+	return contract.dataPart, nil
+}
+
+func (contract *Contract) SetDataPart(data string) {
+	contract.dataPart = data
 }
 
 func (contract *Contract) UpdateStateVariable(variableName string, value ScryptType) error {
@@ -819,6 +868,7 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 	}
 
 	return Contract{
+		name:                     desc["contract"].(string),
 		lockingScriptHexTemplate: lockingScriptHexTemplate,
 		aliases:                  aliases,
 		constructorParams:        constructorParams,
