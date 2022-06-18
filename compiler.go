@@ -21,7 +21,7 @@ import (
 // TODO: Close files without defer.
 // TODO: Don't use pointers with maps, as they themselves are reference types.
 
-var CURRENT_CONTRACT_DESCRIPTION_VERSION = 3
+var CURRENT_CONTRACT_DESCRIPTION_VERSION = 8
 
 var SOURCE_REGEXP = regexp.MustCompile(`^(?P<fileIndex>-?\d+):(?P<line>\d+):(?P<col>\d+):(?P<endLine>\d+):(?P<endCol>\d+)(#(?P<tagStr>.+))?`)
 var WARNING_REGEXP = regexp.MustCompile(`Warning:(\s|\n)*(?P<filePath>[^\s]+):(?P<line>\d+):(?P<column>\d+):(?P<line1>\d+):(?P<column1>\d+):*\n(?P<message>[^\n]+)\n`)
@@ -32,17 +32,63 @@ var DebugModeTag = map[string]string{
 	"LOOP_START": "L0",
 }
 
+type BuildType string
+
+const (
+	Debug   BuildType = "debug"
+	Release BuildType = "release"
+)
+
+type ParamEntity struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type StateEntity = ParamEntity
+
+type StructEntity struct {
+	Name   string        `json:"name"`
+	Params []ParamEntity `json:"params"`
+}
+
+type AliasEntity struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type LibraryEntity struct {
+	Name       string        `json:"name"`
+	Params     []ParamEntity `json:"params"`
+	Properties []ParamEntity `json:"properties"`
+}
+
+type ABIEntityType string
+
+const (
+	FUNCTION    ABIEntityType = "function"
+	CONSTRUCTOR ABIEntityType = "constructor"
+)
+
+type ABIEntity struct {
+	Name   string        `json:"name"`
+	Type   ABIEntityType `json:"type"`
+	Params []ParamEntity `json:"params"`
+	Index  int           `json:"index"`
+}
+
 type CompilerResult struct {
 	Ast             map[string]interface{}   // ASTs from all the compiled source files
 	Asm             []map[string]interface{} // ASM data of the compiled contract
 	DepAst          map[string]interface{}   // ASTs only of dependencies
-	Abi             []map[string]interface{} // ABI of the contract
+	Abi             []ABIEntity              // ABI of the contract
 	Warnings        []CompilerWarning        // Warnings returned by the compiler
 	CompilerVersion string                   // Version of the compiler binary used to compile the contract
 	Contract        string                   // Name of the compiled contract
-	Structs         []map[string]interface{} // Struct declarations
-	Libraries       []map[string]interface{} // Library declarations
-	Aliases         []map[string]string      // Aliases used in the contract
+	StateProps      []StateEntity            // state properties of the compiled contract
+	Structs         []StructEntity           // Struct declarations
+	Libraries       []LibraryEntity          // Library declarations
+	Aliases         []AliasEntity            // Aliases used in the contract
+	buildType       BuildType                // buildType
 	SourceFile      string                   // URI of the contracts source file
 	AutoTypedVars   []map[string]interface{} // Variables with infered type
 	SourceMD5       string                   // MD5 hash of the contracts source code
@@ -57,10 +103,12 @@ func (compilerResult CompilerResult) ToDesc() map[string]interface{} {
 	res["compilerVersion"] = compilerResult.CompilerVersion
 	res["contract"] = compilerResult.Contract
 	res["md5"] = compilerResult.SourceMD5
+	res["stateProps"] = compilerResult.StateProps
 	res["structs"] = compilerResult.Structs
 	res["library"] = compilerResult.Libraries
 	res["alias"] = compilerResult.Aliases
 	res["abi"] = compilerResult.Abi
+	res["buildType"] = compilerResult.buildType
 	res["file"] = ""
 	res["asm"] = compilerResult.RawAsm
 	res["hex"] = compilerResult.RawHex
@@ -107,10 +155,11 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (map[string]interface{},
 type ResultsAst struct {
 	Ast              map[string]interface{}
 	DepAst           map[string]interface{}
-	Aliases          []map[string]string
-	Abi              []map[string]interface{}
-	Structs          []map[string]interface{}
-	Libraries        []map[string]interface{}
+	Aliases          []AliasEntity
+	Abi              []ABIEntity
+	Structs          []StructEntity
+	Libraries        []LibraryEntity
+	StateProps       []StateEntity
 	MainContractName string
 }
 
@@ -234,12 +283,14 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 		Asm:             resultsAsm.Asm,
 		DepAst:          resultsAst.DepAst,
 		Abi:             resultsAst.Abi,
+		buildType:       Debug,
 		Warnings:        warnings,
 		CompilerVersion: compilerVersion,
 		Contract:        resultsAst.MainContractName,
 		Structs:         resultsAst.Structs,
 		Libraries:       resultsAst.Libraries,
 		Aliases:         resultsAst.Aliases,
+		StateProps:      resultsAst.StateProps,
 		SourceFile:      fmt.Sprintf("file://%s", contractPath),
 		AutoTypedVars:   resultsAsm.AutoTypedVars,
 		SourceMD5:       sourceMD5,
@@ -273,7 +324,7 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 			}
 		}()
 
-		descJSON, _ := json.Marshal(desc)
+		descJSON, _ := json.MarshalIndent(desc, "", "  ")
 		_, err = f.WriteString(string(descJSON))
 		if err != nil {
 			return res, err
@@ -402,7 +453,12 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 	staticIntConsts := compilerWrapper.getStaticIntConstDeclarations(&astTree)
 	mainContractName, abi := compilerWrapper.getAbiDeclaration(&srcAstRoot, aliasMap, &staticIntConsts)
 	structs := compilerWrapper.getAstStructDeclarations(&astTree)
-    libraries := compilerWrapper.getAstLibraryDeclarations(&astTree)
+	libraries := compilerWrapper.getAstLibraryDeclarations(&astTree)
+	stateProps, err := compilerWrapper.getStateProps(&srcAstRoot)
+
+	if err != nil {
+		return res, err
+	}
 
 	delete(astTree, compilerWrapper.ContractPath)
 	depAsts := astTree
@@ -413,7 +469,8 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 		Aliases:          aliasesDesc,
 		Abi:              abi,
 		Structs:          structs,
-        Libraries:        libraries,
+		Libraries:        libraries,
+		StateProps:       stateProps,
 		MainContractName: mainContractName,
 	}, nil
 }
@@ -586,8 +643,8 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 	}, nil
 }
 
-func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[string]interface{}) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
+func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[string]interface{}) []StructEntity {
+	res := make([]StructEntity, 0)
 
 	for _, srcElem := range *astTree {
 		srcElem := srcElem.(map[string]interface{})
@@ -597,27 +654,31 @@ func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[st
 
 			name := structElem["name"].(string)
 
-			var params []map[string]string
+			var params []ParamEntity
 			for _, field := range structElem["fields"].([]interface{}) {
 				field := field.(map[string]interface{})
 				pName := field["name"].(string)
 				pType := field["type"].(string)
-				params = append(params, map[string]string{"name": pName, "type": pType})
+				params = append(params, ParamEntity{ // b == Student{"Bob", 0}
+					Name: pName,
+					Type: pType,
+				})
 			}
 
-			toAppend := make(map[string]interface{})
-			toAppend["name"] = name
-			toAppend["params"] = params
+			var entity StructEntity
 
-			res = append(res, toAppend)
+			entity.Name = name
+			entity.Params = params
+
+			res = append(res, entity)
 		}
 	}
 
 	return res
 }
 
-func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[string]interface{}) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
+func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[string]interface{}) []LibraryEntity {
+	res := make([]LibraryEntity, 0)
 
 	for _, srcElem := range *astTree {
 		srcElem := srcElem.(map[string]interface{})
@@ -625,56 +686,87 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 		for _, contractElem := range srcElem["contracts"].([]interface{}) {
 			contractElem := contractElem.(map[string]interface{})
 
-            if (contractElem["nodeType"] != "Library") { continue }
+			if contractElem["nodeType"] != "Library" {
+				continue
+			}
 
 			name := contractElem["name"].(string)
-            
-			var params []map[string]string
-            val, present := contractElem["constructor"]
-            if (present && val != nil) {
-                constructor := contractElem["constructor"].(map[string]interface{})
 
-			    for _, param := range constructor["params"].([]interface{}) {
-			    	param := param.(map[string]interface{})
-			    	pName := "ctor." + param["name"].(string)
-			    	pType := param["type"].(string)
-			    	params = append(params, map[string]string{"name": pName, "type": pType})
-			    }
-            }
+			params := make([]ParamEntity, 0)
+			val, present := contractElem["constructor"]
+			if present && val != nil {
+				constructor := contractElem["constructor"].(map[string]interface{})
+				for _, param := range constructor["params"].([]interface{}) {
+					param := param.(map[string]interface{})
+					pName := "ctor." + param["name"].(string)
+					pType := param["type"].(string)
+					params = append(params, ParamEntity{Name: pName, Type: pType})
+				}
+			} else {
+				for _, property := range contractElem["properties"].([]interface{}) {
+					property := property.(map[string]interface{})
+					pName := property["name"].(string)
+					pType := property["type"].(string)
+					params = append(params, ParamEntity{Name: pName, Type: pType})
+				}
+			}
 
-			var properties []map[string]string
+			properties := make([]ParamEntity, 0)
 			for _, property := range contractElem["properties"].([]interface{}) {
-			    property := property.(map[string]interface{})
-			    pName := property["name"].(string)
-			    pType := property["type"].(string)
-			    properties = append(properties, map[string]string{"name": pName, "type": pType})
-            }
+				property := property.(map[string]interface{})
+				pName := property["name"].(string)
+				pType := property["type"].(string)
+				properties = append(properties, ParamEntity{Name: pName, Type: pType})
+			}
 
-			toAppend := make(map[string]interface{})
-			toAppend["name"] = name
-			toAppend["params"] = params
-			toAppend["properties"] = properties
+			res = append(res, LibraryEntity{
+				Name:       name,
+				Params:     params,
+				Properties: properties,
+			})
+		}
+	}
 
-			res = append(res, toAppend)
-        }
-    }
-
-    return res
+	return res
 }
 
-func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface{}) []map[string]string {
-	res := make([]map[string]string, 0)
+func (compilerWrapper *CompilerWrapper) getAliases(astTree *map[string]interface{}) []AliasEntity {
+	res := make([]AliasEntity, 0)
 
 	for _, srcElem := range *astTree {
 		srcElem := srcElem.(map[string]interface{})
 
 		for _, aliasElem := range srcElem["alias"].([]interface{}) {
 			aliasElem := aliasElem.(map[string]interface{})
-			res = append(res, map[string]string{"name": aliasElem["alias"].(string), "type": aliasElem["type"].(string)})
+			res = append(res, AliasEntity{Name: aliasElem["alias"].(string), Type: aliasElem["type"].(string)})
 		}
 	}
 
 	return res
+}
+
+func (compilerWrapper *CompilerWrapper) getStateProps(srcAstRoot *map[string]interface{}) ([]StateEntity, error) {
+
+	stateProps := make([]StateEntity, 0)
+
+	contracts := (*srcAstRoot)["contracts"].([]interface{})
+
+	if contracts[len(contracts)-1] == nil {
+		return stateProps, errors.New("no contract found in ast")
+	}
+	mainContract := contracts[len(contracts)-1].(map[string]interface{})
+
+	for _, property := range mainContract["properties"].([]interface{}) {
+		property := property.(map[string]interface{})
+
+		if property["state"].(bool) {
+			n := property["name"].(string)
+			t := property["type"].(string)
+			stateProps = append(stateProps, ParamEntity{Name: n, Type: t})
+		}
+	}
+	return stateProps, nil
+
 }
 
 func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *map[string]interface{}) map[string]*big.Int {
@@ -711,7 +803,7 @@ func (compilerWrapper *CompilerWrapper) getStaticIntConstDeclarations(astTree *m
 
 func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string]interface{},
 	aliases map[string]string,
-	staticIntConsts *map[string]*big.Int) (string, []map[string]interface{}) {
+	staticIntConsts *map[string]*big.Int) (string, []ABIEntity) {
 	contracts := (*srcAstRoot)["contracts"].([]interface{})
 
 	if contracts[len(contracts)-1] == nil {
@@ -723,20 +815,16 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
 	constructor := compilerWrapper.getConstructorDeclaration(mainContract)
 
 	declarations := compilerWrapper.getPublicFunctionDeclarations(mainContract)
-	if constructor != nil {
-		declarations = append(declarations, constructor)
-	}
+	declarations = append(declarations, constructor)
 	for _, declaration := range declarations {
-		if declaration["params"] == nil {
-			continue
-		}
-		params := declaration["params"].([]map[string]interface{})
+
+		params := declaration.Params
 		for _, param := range params {
 			resolvedParamType := compilerWrapper.resolveAbiParamType(mainContractName,
-				param["type"].(string),
+				param.Type,
 				aliases,
 				staticIntConsts)
-			param["type"] = resolvedParamType
+			param.Type = resolvedParamType
 		}
 
 	}
@@ -745,9 +833,8 @@ func (compilerWrapper *CompilerWrapper) getAbiDeclaration(srcAstRoot *map[string
 }
 
 // Extract constructor declaration from the compiler produced AST.
-func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree map[string]interface{}) map[string]interface{} {
-	var params []map[string]interface{}
-
+func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree map[string]interface{}) ABIEntity {
+	params := make([]ParamEntity, 0)
 	if contractTree["constructor"] != nil {
 		// Explicit constructor.
 		constructor := contractTree["constructor"].(map[string]interface{})
@@ -755,8 +842,7 @@ func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree m
 			param := param.(map[string]interface{})
 			pName := param["name"].(string)
 			pType := param["type"].(string)
-			pState := false
-			params = append(params, map[string]interface{}{"name": pName, "type": pType, "state": pState})
+			params = append(params, ParamEntity{Name: pName, Type: pType})
 		}
 	} else if contractTree["properties"] != nil {
 		// Implicit constructor.
@@ -765,52 +851,42 @@ func (compilerWrapper *CompilerWrapper) getConstructorDeclaration(contractTree m
 			prop := prop.(map[string]interface{})
 			pName := strings.ReplaceAll(prop["name"].(string), "this.", "")
 			pType := prop["type"].(string)
-			pState := prop["state"].(bool)
-			params = append(params, map[string]interface{}{"name": pName, "type": pType, "state": pState})
+			params = append(params, ParamEntity{Name: pName, Type: pType})
 		}
 	}
 
-	res := make(map[string]interface{})
-	res["type"] = "constructor"
-	res["params"] = params
-	return res
+	return ABIEntity{
+		Type:   CONSTRUCTOR,
+		Name:   "constructor",
+		Params: params,
+	}
 }
 
 // Extract public function declarations from the compiler produced AST.
-func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTree map[string]interface{}) []map[string]interface{} {
-	var res []map[string]interface{}
+func (compilerWrapper *CompilerWrapper) getPublicFunctionDeclarations(contractTree map[string]interface{}) []ABIEntity {
+	res := make([]ABIEntity, 0)
 	pubFuncIdx := 0
 
 	functions := contractTree["functions"].([]interface{})
 	for _, function := range functions {
 		function := function.(map[string]interface{})
 		visibility := function["visibility"].(string)
+		name := function["name"].(string)
+		nodeType := function["nodeType"].(string)
 		if visibility == "Public" {
-			abiType := "function"
-			name := function["name"].(string)
 
-			index := -1
-			nodeType := function["nodeType"].(string)
-			if nodeType != "Constructor" {
-				index = pubFuncIdx
-				pubFuncIdx += 1
-			}
-
-			var params []map[string]interface{}
+			var params []ParamEntity
 			for _, param := range function["params"].([]interface{}) {
 				param := param.(map[string]interface{})
 				pName := param["name"].(string)
 				pType := param["type"].(string)
-				params = append(params, map[string]interface{}{"name": pName, "type": pType})
+				params = append(params, ParamEntity{Name: pName, Type: pType})
 			}
 
-			abiEntity := make(map[string]interface{})
-			abiEntity["type"] = abiType
-			abiEntity["name"] = name
-			abiEntity["index"] = index
-			abiEntity["params"] = params
-
-			res = append(res, abiEntity)
+			if nodeType != "Constructor" {
+				res = append(res, ABIEntity{Name: name, Type: FUNCTION, Params: params, Index: pubFuncIdx})
+				pubFuncIdx += 1
+			}
 		}
 
 	}

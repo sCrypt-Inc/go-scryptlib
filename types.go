@@ -3,6 +3,7 @@ package scryptlib
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -198,7 +199,10 @@ func (pubKeyType PubKey) Hex() (string, error) {
 }
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
-	var res []byte
+	res := make([]byte, 0)
+	if pubKeyType.value == nil {
+		return res, nil
+	}
 	b := pubKeyType.value.SerialiseCompressed()
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
@@ -284,6 +288,19 @@ func NewRipemd160FromBase58(value string) (Ripemd160, error) {
 		return res, errors.New("Base58 string for Ripemd160 should be 40 characters long")
 	}
 	return Ripemd160{base58.Decode(value)}, nil
+}
+
+func NewPubKeyHash(value string) (Ripemd160, error) {
+	var res Ripemd160
+	if len(value) != 40 {
+		return res, errors.New("hex string for PubKeyHash should be 40 characters long")
+	}
+	b, err := hex.DecodeString(value)
+
+	if err != nil {
+		return res, errors.New("invalid hex string for PubKeyHash")
+	}
+	return Ripemd160{b}, nil
 }
 
 type Sha1 struct {
@@ -523,10 +540,20 @@ func (structType Struct) GetTypeString() string {
 // TODO: Function for creating structs
 
 type Library struct {
-	typeName         string
-	paramKeysInOrder []string
-	params           map[string]ScryptType
-	properties       map[string]ScryptType
+	typeName            string
+	paramKeysInOrder    []string
+	params              map[string]ScryptType
+	propertyKeysInOrder []string
+	properties          map[string]ScryptType
+}
+
+func (libraryType Library) ctor() bool {
+	for _, key := range libraryType.paramKeysInOrder {
+		if strings.HasPrefix(key, "ctor.") {
+			return true
+		}
+	}
+	return false
 }
 
 func (libraryType Library) Hex() (string, error) {
@@ -558,6 +585,10 @@ func (libraryType Library) Bytes() ([]byte, error) {
 
 func (libraryType *Library) UpdateValue(paramName string, newVal ScryptType) {
 	// TODO: Is there a more efficient way to do value updates?
+
+	if libraryType.ctor() {
+		paramName = "ctor." + paramName
+	}
 	newParams := make(map[string]ScryptType)
 	for key, val := range libraryType.params {
 		if key == paramName {
@@ -569,10 +600,22 @@ func (libraryType *Library) UpdateValue(paramName string, newVal ScryptType) {
 	libraryType.params = newParams
 }
 
+func (libraryType *Library) UpdatePropertyValue(propertyName string, newVal ScryptType) {
+	// TODO: Is there a more efficient way to do value updates?
+	newProperties := make(map[string]ScryptType)
+	for key, val := range libraryType.properties {
+		if key == propertyName {
+			newProperties[key] = newVal
+		} else {
+			newProperties[key] = val
+		}
+	}
+	libraryType.properties = newProperties
+}
+
 func (libraryType Library) GetTypeString() string {
 	return libraryType.typeName
 }
-
 
 type HashedMap struct {
 	values map[[32]byte][32]byte
@@ -601,6 +644,13 @@ func (hashedMapType *HashedMap) Delete(key ScryptType) error {
 	if err != nil {
 		return err
 	}
+
+	_, ok := hashedMapType.values[hashKey]
+
+	if !ok {
+		return fmt.Errorf("key not present in HashedMap: \"%s\"", hashKey)
+	}
+
 	delete(hashedMapType.values, hashKey)
 
 	return nil
@@ -622,7 +672,7 @@ func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
 		idx++
 	}
 
-	return -1, errors.New(fmt.Sprintf("Key not present in HashedMap: \"%s\"", hashKey))
+	return -1, fmt.Errorf("key not present in HashedMap: \"%s\"", hashKey)
 }
 
 func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
@@ -635,11 +685,9 @@ func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
 
 	sort.SliceStable(keysAll,
 		func(i, j int) bool {
-			a := new(big.Int)
-			b := new(big.Int)
-			a.SetBytes(ReverseByteSlice(keysAll[i][:]))
-			b.SetBytes(ReverseByteSlice(keysAll[j][:]))
-			return a.Cmp(b) > 0
+			a := NumberFromBuffer(keysAll[i][:], true)
+			b := NumberFromBuffer(keysAll[j][:], true)
+			return a.Cmp(b) < 0
 		})
 
 	return keysAll
@@ -729,11 +777,9 @@ func (hashedSetType HashedSet) GetKeysSorted() [][32]byte {
 
 	sort.SliceStable(keysAll,
 		func(i, j int) bool {
-			a := new(big.Int)
-			b := new(big.Int)
-			a.SetBytes(ReverseByteSlice(keysAll[i][:]))
-			b.SetBytes(ReverseByteSlice(keysAll[j][:]))
-			return a.Cmp(b) > 0
+			a := NumberFromBuffer(keysAll[i][:], true)
+			b := NumberFromBuffer(keysAll[j][:], true)
+			return a.Cmp(b) < 0
 		})
 
 	return keysAll
