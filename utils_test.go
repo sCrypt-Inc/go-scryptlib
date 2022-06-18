@@ -1,6 +1,7 @@
 package scryptlib
 
 import (
+	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -50,4 +51,62 @@ func TestStructCompare(t *testing.T) {
 
 	res3 := IsStructsSameStructure(person0, dog0)
 	assert.Equal(t, res3, false)
+}
+
+func Test_num2bin(t *testing.T) {
+
+	hex, _ := num2bin(Int{big.NewInt(0)}, 3)
+
+	assert.Equal(t, hex, "000000")
+
+	hex, _ = num2bin(Int{big.NewInt(10)}, 1)
+
+	assert.Equal(t, hex, "0a")
+
+	hex, _ = num2bin(Int{big.NewInt(0x123)}, 2)
+
+	assert.Equal(t, hex, "2301")
+
+	hex, _ = num2bin(Int{big.NewInt(0x123456789abcde)}, 7)
+
+	assert.Equal(t, hex, "debc9a78563412")
+
+	hex, _ = num2bin(Int{big.NewInt(-1000)}, 2)
+
+	assert.Equal(t, hex, "e883")
+
+	hex, _ = num2bin(Int{big.NewInt(0x123456789abcde)}, 10)
+
+	assert.Equal(t, hex, "debc9a78563412000000")
+
+	hex, _ = num2bin(Int{big.NewInt(-1000)}, 4)
+
+	assert.Equal(t, hex, "e8030080")
+
+	hex, _ = num2bin(Int{big.NewInt(-123456789)}, 8)
+
+	assert.Equal(t, hex, "15cd5b0700000080")
+
+}
+
+func Test_flattenSha256(t *testing.T) {
+
+	pkh, _ := NewPubKeyHash("7544770a4f91feef04c35d90190b1d4eb4fbe4c0")
+	s, _ := FlattenSHA256(pkh)
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "f1cad1c1958e36c48e81ad86ce2cafda0f509a5872af8354d29cd69609ab8e73")
+
+	s, _ = FlattenSHA256(Int{big.NewInt(0)})
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+	s, _ = FlattenSHA256(Bool{false})
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+	e := make([]byte, 0)
+	s, _ = FlattenSHA256(NewBytes(e))
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
 }

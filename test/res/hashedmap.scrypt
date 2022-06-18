@@ -1,0 +1,79 @@
+
+import "serializer.scrypt";
+
+type State = bytes;
+
+struct Key {
+    PubKeyHash pkh;
+    int keyIndex;
+}
+
+
+library HashedMapWapper {
+    
+    static function fromState(State s) : HashedMap<PubKeyHash, int> {
+        HashedMap<PubKeyHash, int> map = new HashedMap(s);
+        return map;
+    }
+
+    static function toState(HashedMap<PubKeyHash, int> map) : State {
+        return map.data();
+    }
+
+
+    static function deserialize(bytes buf) : State {
+        Reader r = new Reader(buf);
+        return r.readBytes();
+    }
+
+    static function serialize(State s) : bytes {
+        bytes sBuf = Writer.writeBytes(s);
+        return Writer.serializeState(sBuf);
+    }
+}
+
+
+
+contract HashedMapExample {
+
+    public function put(Key key, int balance, SigHashPreimage txPreimage) {
+        require(Tx.checkPreimage(txPreimage));
+
+        // deserialize state (i.e., counter value)
+        bytes scriptCode = SigHash.scriptCode(txPreimage);
+        int stateStart = Reader.getStateStart(scriptCode);
+        State states = HashedMapWapper.deserialize(scriptCode[stateStart :]);
+
+        //update map
+        auto map = HashedMapWapper.fromState(states);
+        require(map.set({key.pkh, key.keyIndex}, balance));
+
+        // write/serialize state
+        bytes stateBuf = HashedMapWapper.serialize(HashedMapWapper.toState(map));
+
+        bytes scriptCode_ = scriptCode[: stateStart] + stateBuf;
+        bytes output = Utils.buildOutput(scriptCode_, SigHash.value(txPreimage));
+        require(hash256(output) == SigHash.hashOutputs(txPreimage));
+    }
+
+
+    public function delete(Key key, SigHashPreimage txPreimage) {
+        require(Tx.checkPreimage(txPreimage));
+
+        // deserialize state (i.e., counter value)
+        bytes scriptCode = SigHash.scriptCode(txPreimage);
+        int stateStart = Reader.getStateStart(scriptCode);
+        State states = HashedMapWapper.deserialize(scriptCode[stateStart :]);
+
+        //update map
+        auto map = HashedMapWapper.fromState(states);
+        require(map.delete({key.pkh, key.keyIndex}));
+
+        // write/serialize state
+        bytes stateBuf = HashedMapWapper.serialize(HashedMapWapper.toState(map));
+
+        bytes scriptCode_ = scriptCode[: stateStart] + stateBuf;
+        bytes output = Utils.buildOutput(scriptCode_, SigHash.value(txPreimage));
+        require(hash256(output) == SigHash.hashOutputs(txPreimage));
+    }
+}

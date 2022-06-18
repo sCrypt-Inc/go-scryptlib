@@ -3,6 +3,7 @@ package scryptlib
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -287,6 +288,19 @@ func NewRipemd160FromBase58(value string) (Ripemd160, error) {
 		return res, errors.New("Base58 string for Ripemd160 should be 40 characters long")
 	}
 	return Ripemd160{base58.Decode(value)}, nil
+}
+
+func NewPubKeyHash(value string) (Ripemd160, error) {
+	var res Ripemd160
+	if len(value) != 40 {
+		return res, errors.New("hex string for PubKeyHash should be 40 characters long")
+	}
+	b, err := hex.DecodeString(value)
+
+	if err != nil {
+		return res, errors.New("invalid hex string for PubKeyHash")
+	}
+	return Ripemd160{b}, nil
 }
 
 type Sha1 struct {
@@ -630,6 +644,13 @@ func (hashedMapType *HashedMap) Delete(key ScryptType) error {
 	if err != nil {
 		return err
 	}
+
+	_, ok := hashedMapType.values[hashKey]
+
+	if !ok {
+		return fmt.Errorf("key not present in HashedMap: \"%s\"", hashKey)
+	}
+
 	delete(hashedMapType.values, hashKey)
 
 	return nil
@@ -651,7 +672,7 @@ func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
 		idx++
 	}
 
-	return -1, errors.New(fmt.Sprintf("Key not present in HashedMap: \"%s\"", hashKey))
+	return -1, fmt.Errorf("key not present in HashedMap: \"%s\"", hashKey)
 }
 
 func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
@@ -664,11 +685,9 @@ func (hashedMapType HashedMap) GetKeysSorted() [][32]byte {
 
 	sort.SliceStable(keysAll,
 		func(i, j int) bool {
-			a := new(big.Int)
-			b := new(big.Int)
-			a.SetBytes(ReverseByteSlice(keysAll[i][:]))
-			b.SetBytes(ReverseByteSlice(keysAll[j][:]))
-			return a.Cmp(b) > 0
+			a := NumberFromBuffer(keysAll[i][:], true)
+			b := NumberFromBuffer(keysAll[j][:], true)
+			return a.Cmp(b) < 0
 		})
 
 	return keysAll
@@ -758,11 +777,9 @@ func (hashedSetType HashedSet) GetKeysSorted() [][32]byte {
 
 	sort.SliceStable(keysAll,
 		func(i, j int) bool {
-			a := new(big.Int)
-			b := new(big.Int)
-			a.SetBytes(ReverseByteSlice(keysAll[i][:]))
-			b.SetBytes(ReverseByteSlice(keysAll[j][:]))
-			return a.Cmp(b) > 0
+			a := NumberFromBuffer(keysAll[i][:], true)
+			b := NumberFromBuffer(keysAll[j][:], true)
+			return a.Cmp(b) < 0
 		})
 
 	return keysAll

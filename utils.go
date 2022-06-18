@@ -3,6 +3,7 @@ package scryptlib
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -93,6 +94,10 @@ func ResolveType(typeStr string, aliases map[string]string) string {
 		return ToLiteralArrayTypeStr(ResolveType(typeName, aliases), arraySizes)
 	}
 
+	if typeStr == "PubKeyHash" {
+		return "Ripemd160"
+	}
+
 	resolvedType, ok := aliases[typeStr]
 	if ok {
 		return ResolveType(resolvedType, aliases)
@@ -118,6 +123,14 @@ func BigIntToBytes_LE(value *big.Int) []byte {
 	for i := 0; i < len(b)/2; i++ {
 		b[i], b[len(b)-i-1] = b[len(b)-i-1], b[i]
 	}
+
+	if value.Cmp(big.NewInt(0)) == -1 {
+		// reset sign bit
+		lastByte := b[len(b)-1]
+		lastByte = lastByte | 0x80
+		b[len(b)-1] = lastByte
+	}
+
 	return b
 }
 
@@ -435,4 +448,105 @@ func ReverseByteSlice(s []byte) []byte {
 	}
 
 	return a
+}
+
+func NumberFromBuffer(s []byte, littleEndian bool) *big.Int {
+
+	a := new(big.Int)
+
+	if littleEndian {
+		s = ReverseByteSlice(s)
+	}
+
+	if s[0]&0x80 == 0x80 {
+		s[0] = s[0] & 0x7f
+		b := new(big.Int)
+		b.SetBytes(s)
+		a.Neg(b)
+	} else {
+		a.SetBytes(s)
+	}
+
+	return a
+}
+
+func num2bin(n Int, dataLen int) (string, error) {
+	if n.value.Cmp(big.NewInt(0)) == 0 {
+		return strings.Repeat("00", dataLen), nil
+	}
+
+	b := BigIntToBytes_LE(n.value)
+
+	s := fmt.Sprintf("%02x", b)
+
+	byteLen_ := len(b)
+	if byteLen_ > dataLen {
+		return "", fmt.Errorf("cannot fit in %d bytes", dataLen)
+	}
+
+	if byteLen_ == dataLen {
+		return s, nil
+	}
+
+	paddingLen := dataLen - byteLen_
+	lastByte := b[byteLen_-1:][0]
+	rest := b[:byteLen_-1]
+
+	if n.value.Cmp(big.NewInt(0)) == -1 {
+		// reset sign bit
+		lastByte = lastByte & 0x7F
+	}
+
+	b = append(rest, lastByte)
+
+	padding := ""
+
+	if n.value.Cmp(big.NewInt(0)) == 1 {
+		padding = strings.Repeat("00", paddingLen)
+	} else {
+		padding = strings.Repeat("00", paddingLen-1) + "80"
+	}
+
+	return fmt.Sprintf("%02x", b) + padding, nil
+}
+
+const (
+	STATE_LEN_2BYTES = 2
+	STATE_LEN_3BYTES = 3
+	STATE_LEN_4BYTES = 4
+)
+
+// serialize contract state into Script hex
+func serializeState(state string, stateBytes int) (string, error) {
+
+	if stateBytes <= 1 || stateBytes > 4 {
+		return "", fmt.Errorf("invalid stateBytes")
+	}
+
+	if len(strings.TrimSpace(state)) == 0 {
+		h := fmt.Sprintf("%02x", stateBytes)
+		return h + strings.Repeat("00", stateBytes), nil
+	}
+
+	s, err := hex.DecodeString(state)
+	if err != nil {
+		return "", err
+	}
+
+	s, err = appendPushdataPrefix(s)
+	if err != nil {
+		return "", err
+	}
+	stateLen := len(s)
+
+	// use fixed size to denote state len
+	lenHex, err := num2bin(NewInt(int64(stateLen)), stateBytes)
+
+	if err != nil {
+		return "", err
+	}
+
+	h := fmt.Sprintf("%02x", stateBytes)
+	return hex.EncodeToString(s) + h + lenHex, nil
+
 }
