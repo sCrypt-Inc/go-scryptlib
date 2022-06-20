@@ -115,6 +115,7 @@ func TestContractP2PKH(t *testing.T) {
 	success, err := contractP2PKH.EvaluatePublicFunction("unlock")
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
+
 }
 
 func TestContractCounter(t *testing.T) {
@@ -131,7 +132,7 @@ func TestContractCounter(t *testing.T) {
 	err = counter.SetConstructorParams(constructorParams)
 	assert.NoError(t, err)
 
-	counter.SetDataPart("00")
+	counter.SetDataPartInASM("00")
 
 	lockingScript, err := counter.GetLockingScript()
 	assert.NoError(t, err)
@@ -147,7 +148,7 @@ func TestContractCounter(t *testing.T) {
 
 	//Increment counter for next locking script
 
-	newLockingScript, err := counter.GetNewLockingScript("01")
+	newLockingScript, err := counter.GetNewLockingScript("0101")
 
 	assert.NoError(t, err)
 	currOutput := bt.Output{
@@ -835,15 +836,16 @@ func TestLibrary4(t *testing.T) {
 	success, err := library3.EvaluatePublicFunction("unlock")
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
+
 }
 
-func runPut(t *testing.T, hashedmap Contract, hm HashedMap, pkh Ripemd160, balance int64) {
+func runPut(t *testing.T, hashedmap *Contract, hm HashedMap, pkh Ripemd160, balance int64) {
 
 	data, _ := hm.Hex()
 
 	dataPart, _ := serializeState(data, STATE_LEN_3BYTES)
 
-	hashedmap.SetDataPart(dataPart)
+	hashedmap.SetDataPartInHex(dataPart)
 
 	lockingScript, err := hashedmap.GetLockingScript()
 	assert.NoError(t, err)
@@ -905,16 +907,16 @@ func runPut(t *testing.T, hashedmap Contract, hm HashedMap, pkh Ripemd160, balan
 	assert.Equal(t, true, success)
 
 	//update the state of the contract instance after the contract be executed
-	hashedmap.SetDataPart(newDataPart)
+	hashedmap.SetDataPartInHex(newDataPart)
 }
 
-func runDelete(t *testing.T, hashedmap Contract, hm HashedMap, pkh Ripemd160) {
+func runDelete(t *testing.T, hashedmap *Contract, hm HashedMap, pkh Ripemd160) {
 
 	data, _ := hm.Hex()
 
 	dataPart, _ := serializeState(data, STATE_LEN_3BYTES)
 
-	hashedmap.SetDataPart(dataPart)
+	hashedmap.SetDataPartInHex(dataPart)
 
 	lockingScript, err := hashedmap.GetLockingScript()
 	assert.NoError(t, err)
@@ -979,7 +981,7 @@ func runDelete(t *testing.T, hashedmap Contract, hm HashedMap, pkh Ripemd160) {
 	assert.Equal(t, true, success)
 
 	//update the state of the contract instance after the contract be executed
-	hashedmap.SetDataPart(newDataPart)
+	hashedmap.SetDataPartInHex(newDataPart)
 }
 
 func NewPKH(wifstr string) Ripemd160 {
@@ -1009,26 +1011,26 @@ func TestContractHashedMap(t *testing.T) {
 	pkh := NewPKH("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
 
 	balance := 11111
-	runPut(t, hashedmap, hm, pkh, int64(balance))
+	runPut(t, &hashedmap, hm, pkh, int64(balance))
 
 	//update balance
 	balance = 11111111
-	runPut(t, hashedmap, hm, pkh, int64(balance))
+	runPut(t, &hashedmap, hm, pkh, int64(balance))
 
 	// PUT one more key-value pair
 
 	pkh1 := NewPKH("cQcjHS827WgD9yu7JDEPzxcZnYMBde7yjQoiiMBDTC6hG55m4ME3")
-	runPut(t, hashedmap, hm, pkh1, 21000)
+	runPut(t, &hashedmap, hm, pkh1, 21000)
 
 	// PUT one more key-value pair
 	pkh2 := NewPKH("cQrRVKafjo7Hy4HFD8NJWUUW4h9M9deQhBu6V6YTQpUcRQvfswHJ")
-	runPut(t, hashedmap, hm, pkh2, 100000)
-	runPut(t, hashedmap, hm, pkh2, 0)
+	runPut(t, &hashedmap, hm, pkh2, 100000)
+	runPut(t, &hashedmap, hm, pkh2, 0)
 
 	//	PUT one more key-value pair
 	pkh3 := NewPKH("cV3hHnEZekLakJc8aLohu7yq5PTjVT41mx4r6FzGRCi38sZ8c7kY")
-	runPut(t, hashedmap, hm, pkh3, 100)
+	runPut(t, &hashedmap, hm, pkh3, 100)
 
-	runDelete(t, hashedmap, hm, pkh2)
+	runDelete(t, &hashedmap, hm, pkh2)
 
 }

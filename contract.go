@@ -59,7 +59,9 @@ type ExecutionContext struct {
 type Contract struct {
 	name                     string
 	lockingScriptHexTemplate string
-	dataPart                 string
+	executedPubFunc          string
+	dataPartInASM            string
+	dataPartInHex            string
 	aliases                  map[string]string
 	constructorParams        []functionParam
 	stateProps               []StateProp
@@ -68,6 +70,7 @@ type Contract struct {
 	// Maps struct names to related templates.
 	libraryTypes     map[string]Library // Templates of contracts libraries.
 	executionContext ExecutionContext
+	file             string
 	contextSet       bool
 }
 
@@ -206,6 +209,8 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 		return false, err
 	}
 
+	contract.executedPubFunc = functionName
+
 	if !contract.contextSet {
 		lockingScript, err := contract.GetLockingScript()
 		if err != nil {
@@ -217,6 +222,8 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 		)
 
 		if err != nil {
+			url := contract.genLaunchConfig()
+			fmt.Println(url)
 			return false, err
 		}
 	} else {
@@ -237,6 +244,8 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 			interpreter.WithAfterGenesis(),
 		)
 		if err != nil {
+			url := contract.genLaunchConfig()
+			fmt.Println(url)
 			return false, err
 		}
 	}
@@ -288,17 +297,22 @@ func (contract *Contract) GetLockingScript() (*bscript.Script, error) {
 		return res, err
 	}
 
-	dataPart, err := contract.GetDataPart()
-	if err != nil {
-		return res, err
-	}
-
-	if dataPart != "" {
+	if contract.HasDataPart() {
+		dataPart, err := contract.GetDataPart()
+		if err != nil {
+			return res, err
+		}
 		// Code and data part are seperated by OP_RETURN.
 		res, err = bscript.NewFromHexString(codePart + dataPart)
+
+		if err != nil {
+			return res, err
+		}
+
 	} else {
 		res, err = bscript.NewFromHexString(codePart)
 	}
+
 	if err != nil {
 		return res, err
 	}
@@ -349,7 +363,7 @@ func (contract *Contract) GetCodePart() (string, error) {
 		}
 	}
 
-	if len(contract.stateProps) > 0 || contract.dataPart != "" {
+	if contract.HasDataPart() {
 		return lockingScriptHex + "6a", nil
 	}
 
@@ -386,19 +400,106 @@ func (contract *Contract) GetStates() (string, error) {
 	return sb.String(), nil
 }
 
+func (contract *Contract) isStateful() bool {
+	return len(contract.stateProps) > 0
+}
+
 func (contract *Contract) GetDataPart() (string, error) {
 	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
 	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
 
-	if len(contract.stateProps) > 0 {
+	hex, err := contract.GetDataPartInHex()
+
+	if err == nil {
+		return hex, nil
+	}
+
+	asm, err := contract.GetDataPartInASM()
+
+	if err == nil {
+		b, err := bscript.NewFromASM(asm)
+		return b.String(), err
+	}
+
+	return "", fmt.Errorf("no dataPart")
+}
+
+func (contract *Contract) GetDataPartInHex() (string, error) {
+	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
+	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
+
+	if contract.isStateful() {
 		return contract.GetStates()
 	}
 
-	return contract.dataPart, nil
+	if !isStringEmpty(contract.dataPartInHex) {
+		return contract.dataPartInHex, nil
+	}
+
+	return "", fmt.Errorf("no dataPartInHex")
 }
 
-func (contract *Contract) SetDataPart(data string) {
-	contract.dataPart = data
+func (contract *Contract) GetDataPartInASM() (string, error) {
+
+	if !isStringEmpty(contract.dataPartInASM) {
+		return contract.dataPartInASM, nil
+	}
+
+	return "", fmt.Errorf("no dataPartInASM")
+}
+
+func (contract *Contract) HasDataPart() bool {
+	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
+	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
+	if contract.isStateful() {
+		return true
+	}
+	return !isStringEmpty(contract.dataPartInASM) || !isStringEmpty(contract.dataPartInHex)
+}
+
+func (contract *Contract) GetTxContext() (TxContext, error) {
+
+	var txContext TxContext
+
+	if !contract.IsExecutionContextSet() {
+		return txContext, fmt.Errorf("no ExecutionContext setted ")
+	}
+
+	txContext = TxContext{
+		Hex:           contract.executionContext.Tx.String(),
+		InputIndex:    contract.executionContext.InputIdx,
+		InputSatoshis: int(contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxSatoshis),
+	}
+
+	if contract.HasDataPart() {
+
+		hex, err := contract.GetDataPartInHex()
+
+		if err == nil {
+			txContext.OpReturnHex = hex
+
+			return txContext, nil
+		}
+
+		asm, err := contract.GetDataPartInASM()
+
+		if err == nil {
+			txContext.OpReturn = asm
+			return txContext, nil
+		}
+
+		return txContext, err
+	}
+
+	return txContext, nil
+}
+
+func (contract *Contract) SetDataPartInASM(asm string) {
+	contract.dataPartInASM = asm
+}
+
+func (contract *Contract) SetDataPartInHex(hex string) {
+	contract.dataPartInHex = hex
 }
 
 func (contract *Contract) UpdateStateVariable(variableName string, value ScryptType) error {
@@ -868,6 +969,7 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 	}
 
 	return Contract{
+		file:                     desc["file"].(string),
 		name:                     desc["contract"].(string),
 		lockingScriptHexTemplate: lockingScriptHexTemplate,
 		aliases:                  aliases,

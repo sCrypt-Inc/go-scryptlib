@@ -97,6 +97,16 @@ success, err := contractDemo.EvaluatePublicFunction("add")
 
 The above method call will use the parameter values, that we set in the previous steps.
 
+## Launch sCrypt IDE debugger
+
+After executing the `EvaluatePublicFunction` function, you can start the debugger with the 
+[launch debugger command](https://scrypt-ide.readthedocs.io/en/latest/testing.html#launch-debugger-command) by printing the launch debugger url.
+
+```js
+// calling genLaunchConfig to generate launch debugger url
+url := contractDemo.genLaunchConfig()
+fmt.Println(url)
+```
 
 ## Testing
 

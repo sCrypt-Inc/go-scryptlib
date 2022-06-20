@@ -550,3 +550,7 @@ func serializeState(state string, stateBytes int) (string, error) {
 	return hex.EncodeToString(s) + h + lenHex, nil
 
 }
+
+func isStringEmpty(s string) bool {
+	return len(strings.TrimSpace(s)) == 0
+}

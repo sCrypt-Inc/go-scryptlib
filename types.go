@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -95,6 +96,10 @@ func (intType Int) GetTypeString() string {
 	return "int"
 }
 
+func (intType Int) MarshalJSON() ([]byte, error) {
+	return []byte("\"" + intType.value.String() + "\""), nil
+}
+
 type Bool struct {
 	value bool
 }
@@ -112,7 +117,7 @@ func (boolType Bool) Hex() (string, error) {
 }
 
 func (boolType Bool) Bytes() ([]byte, error) {
-	if boolType.value == true {
+	if boolType.value {
 		return []byte{0x51}, nil
 	}
 	return []byte{0x00}, nil
@@ -120,6 +125,15 @@ func (boolType Bool) Bytes() ([]byte, error) {
 
 func (boolType Bool) GetTypeString() string {
 	return "bool"
+}
+
+func (boolType Bool) MarshalJSON() ([]byte, error) {
+
+	if boolType.value {
+		return []byte("true"), nil
+	}
+
+	return []byte("false"), nil
 }
 
 type Bytes struct {
@@ -151,6 +165,11 @@ func (bytesType Bytes) GetTypeString() string {
 	return "bytes"
 }
 
+func (bytesType Bytes) MarshalJSON() ([]byte, error) {
+	l := fmt.Sprintf("\"b'%s'\"", hex.EncodeToString(bytesType.value))
+	return []byte(l), nil
+}
+
 type PrivKey struct {
 	value *bec.PrivateKey
 }
@@ -180,6 +199,15 @@ func (privKeyType PrivKey) Bytes() ([]byte, error) {
 
 func (privKeyType PrivKey) GetTypeString() string {
 	return "PrivKey"
+}
+
+func (privKeyType PrivKey) MarshalJSON() ([]byte, error) {
+	b := privKeyType.value.Serialise()
+	n := new(big.Int)
+	n.SetBytes(b)
+
+	l := fmt.Sprintf("\"PrivKey(%s)\"", n.String())
+	return []byte(l), nil
 }
 
 type PubKey struct {
@@ -216,6 +244,15 @@ func (pubKeyType PubKey) GetTypeString() string {
 	return "PubKey"
 }
 
+func (pubKeyType PubKey) MarshalJSON() ([]byte, error) {
+	if pubKeyType.value == nil {
+		return []byte("\"PubKey(b'')\""), nil
+	}
+	b := pubKeyType.value.SerialiseCompressed()
+	l := fmt.Sprintf("\"PubKey(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
+}
+
 type Sig struct {
 	value *bec.Signature
 	shf   sighash.Flag
@@ -243,6 +280,13 @@ func (sigType Sig) Bytes() ([]byte, error) {
 
 func (sigType Sig) GetTypeString() string {
 	return "Sig"
+}
+
+func (sigType Sig) MarshalJSON() ([]byte, error) {
+	b := sigType.value.Serialise()
+	b = append(b, byte(sigType.shf))
+	l := fmt.Sprintf("\"Sig(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewSigFromDECBytes(sigBytes []byte, shf sighash.Flag) (Sig, error) {
@@ -280,6 +324,12 @@ func (ripemd160Type Ripemd160) Bytes() ([]byte, error) {
 
 func (ripemd160Type Ripemd160) GetTypeString() string {
 	return "Ripemd160"
+}
+
+func (ripemd160Type Ripemd160) MarshalJSON() ([]byte, error) {
+	b := ripemd160Type.value
+	l := fmt.Sprintf("\"Ripemd160(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewRipemd160FromBase58(value string) (Ripemd160, error) {
@@ -335,6 +385,12 @@ func (sha1 Sha1) GetTypeString() string {
 	return "Sha1"
 }
 
+func (sha1Type Sha1) MarshalJSON() ([]byte, error) {
+	b := sha1Type.value
+	l := fmt.Sprintf("\"Sha1(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
+}
+
 type Sha256 struct {
 	// TODO: Should value be fixed size byte array instead?
 	value []byte
@@ -367,6 +423,12 @@ func (sha256 Sha256) GetTypeString() string {
 	return "Sha256"
 }
 
+func (sha256Type Sha256) MarshalJSON() ([]byte, error) {
+	b := sha256Type.value
+	l := fmt.Sprintf("\"Sha256(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
+}
+
 type SigHashType struct {
 	value []byte
 }
@@ -385,6 +447,12 @@ func (sigHashType SigHashType) Bytes() ([]byte, error) {
 
 func (sigHashType SigHashType) GetTypeString() string {
 	return "SigHashType"
+}
+
+func (sigHashType SigHashType) MarshalJSON() ([]byte, error) {
+	b := sigHashType.value
+	l := fmt.Sprintf("\"SigHashType(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 type SigHashPreimage struct {
@@ -418,6 +486,12 @@ func (sigHashPreimage SigHashPreimage) GetTypeString() string {
 	return "SigHashPreimage"
 }
 
+func (sigHashPreimage SigHashPreimage) MarshalJSON() ([]byte, error) {
+	b := sigHashPreimage.value
+	l := fmt.Sprintf("\"SigHashPreimage(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
+}
+
 type OpCodeType struct {
 	value []byte
 }
@@ -436,6 +510,12 @@ func (opCodeType OpCodeType) Bytes() ([]byte, error) {
 
 func (opCodeType OpCodeType) GetTypeString() string {
 	return "OpCodeType"
+}
+
+func (opCodeType OpCodeType) MarshalJSON() ([]byte, error) {
+	b := opCodeType.value
+	l := fmt.Sprintf("\"OpCodeType(b'%s')\"", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 type Array struct {
@@ -487,6 +567,10 @@ func (arrayType Array) GetTypeString() string {
 	return ""
 }
 
+func (arr Array) MarshalJSON() ([]byte, error) {
+	return json.Marshal(arr.values)
+}
+
 type Struct struct {
 	typeName    string
 	keysInOrder []string
@@ -535,6 +619,15 @@ func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) {
 
 func (structType Struct) GetTypeString() string {
 	return structType.typeName
+}
+
+func (structType Struct) MarshalJSON() ([]byte, error) {
+
+	m := make(map[string]ScryptType)
+	for _, key := range structType.keysInOrder {
+		m[key] = structType.values[key]
+	}
+	return json.Marshal(m)
 }
 
 // TODO: Function for creating structs
@@ -615,6 +708,14 @@ func (libraryType *Library) UpdatePropertyValue(propertyName string, newVal Scry
 
 func (libraryType Library) GetTypeString() string {
 	return libraryType.typeName
+}
+
+func (libraryType Library) MarshalJSON() ([]byte, error) {
+	a := make([]ScryptType, 0)
+	for _, key := range libraryType.paramKeysInOrder {
+		a = append(a, libraryType.params[key])
+	}
+	return json.Marshal(a)
 }
 
 type HashedMap struct {
