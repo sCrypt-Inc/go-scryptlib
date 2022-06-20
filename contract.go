@@ -222,6 +222,8 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 		)
 
 		if err != nil {
+			url := contract.genLaunchConfig()
+			fmt.Println(url)
 			return false, err
 		}
 	} else {
@@ -242,6 +244,8 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 			interpreter.WithAfterGenesis(),
 		)
 		if err != nil {
+			url := contract.genLaunchConfig()
+			fmt.Println(url)
 			return false, err
 		}
 	}
