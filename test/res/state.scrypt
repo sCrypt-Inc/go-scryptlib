@@ -1,4 +1,14 @@
 import "util.scrypt";
+
+struct ST1 {
+    int[3] x;
+}
+
+struct ST2 {
+    int x;
+    ST1 st1;
+}
+
 contract StateExample {
 
     @state
@@ -10,9 +20,33 @@ contract StateExample {
     @state
     bool state_bool;
 
+    @state
+    PrivKey privKey;
+
+    @state
+    PubKey pubkey;
+
+    @state
+    Ripemd160 ripemd160;
+
+    @state
+    Sha256 sha256;
+
+    @state
+    OpCodeType opCodeType;
+
+    @state
+    SigHashType sigHashType;
+
+    @state
+    Sig sig;
+
+    @state
+    ST2[1] st2;
+
+
     public function unlock(SigHashPreimage txPreimage, int amount) {
         require(Tx.checkPreimage(txPreimage));
-        // increment counter
         this.counter++;
         this.state_bytes = this.state_bytes + b'01';
         this.state_bool = !this.state_bool;

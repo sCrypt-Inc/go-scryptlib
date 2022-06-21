@@ -153,6 +153,11 @@ func (bytesType Bytes) Hex() (string, error) {
 }
 
 func (bytesType Bytes) Bytes() ([]byte, error) {
+
+	if bytesType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	pushDataPrefix, err := bscript.PushDataPrefix(bytesType.value)
 	if err != nil {
@@ -187,8 +192,18 @@ func (privKeyType PrivKey) Hex() (string, error) {
 }
 
 func (privKeyType PrivKey) Bytes() ([]byte, error) {
+
+	if privKeyType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := privKeyType.value.Serialise()
+
+	for i := 0; i < len(b)/2; i++ {
+		b[i], b[len(b)-i-1] = b[len(b)-i-1], b[i]
+	}
+
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
 		return res, err
@@ -202,6 +217,11 @@ func (privKeyType PrivKey) GetTypeString() string {
 }
 
 func (privKeyType PrivKey) MarshalJSON() ([]byte, error) {
+
+	if privKeyType.value == nil {
+		return []byte("\"PrivKey(0)\""), nil
+	}
+
 	b := privKeyType.value.Serialise()
 	n := new(big.Int)
 	n.SetBytes(b)
@@ -227,10 +247,12 @@ func (pubKeyType PubKey) Hex() (string, error) {
 }
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
-	res := make([]byte, 0)
+
 	if pubKeyType.value == nil {
-		return res, nil
+		return []byte{0x00}, nil
 	}
+
+	res := make([]byte, 0)
 	b := pubKeyType.value.SerialiseCompressed()
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
@@ -267,6 +289,11 @@ func (sigType Sig) Hex() (string, error) {
 }
 
 func (sigType Sig) Bytes() ([]byte, error) {
+
+	if sigType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sigType.value.Serialise()
 	b = append(b, byte(sigType.shf))
@@ -312,6 +339,11 @@ func (ripemd160Type Ripemd160) Hex() (string, error) {
 }
 
 func (ripemd160Type Ripemd160) Bytes() ([]byte, error) {
+
+	if len(ripemd160Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := ripemd160Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -371,6 +403,11 @@ func (sha1Type Sha1) Hex() (string, error) {
 }
 
 func (sha1Type Sha1) Bytes() ([]byte, error) {
+
+	if len(sha1Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sha1Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -409,6 +446,11 @@ func (sha256Type Sha256) Hex() (string, error) {
 }
 
 func (sha256Type Sha256) Bytes() ([]byte, error) {
+
+	if len(sha256Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sha256Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -438,11 +480,27 @@ func NewSighHashType(val []byte) SigHashType {
 }
 
 func (sigHashType SigHashType) Hex() (string, error) {
-	return EvenHexStr(fmt.Sprintf("%x", sigHashType.value)), nil
+	b, err := sigHashType.Bytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (sigHashType SigHashType) Bytes() ([]byte, error) {
-	return sigHashType.value, nil
+
+	if len(sigHashType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
+	var res []byte
+	b := sigHashType.value
+	pushDataPrefix, err := bscript.PushDataPrefix(b)
+	if err != nil {
+		return res, err
+	}
+
+	return append(pushDataPrefix, b...), nil
 }
 
 func (sigHashType SigHashType) GetTypeString() string {
@@ -472,6 +530,11 @@ func (sigHashPreimageType SigHashPreimage) Hex() (string, error) {
 }
 
 func (sigHashPreimageType SigHashPreimage) Bytes() ([]byte, error) {
+
+	if len(sigHashPreimageType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sigHashPreimageType.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -501,11 +564,27 @@ func NewOpCodeType(val []byte) OpCodeType {
 }
 
 func (opCodeType OpCodeType) Hex() (string, error) {
-	return EvenHexStr(fmt.Sprintf("%x", opCodeType.value)), nil
+	b, err := opCodeType.Bytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (opCodeType OpCodeType) Bytes() ([]byte, error) {
-	return opCodeType.value, nil
+
+	if len(opCodeType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
+	var res []byte
+	b := opCodeType.value
+	pushDataPrefix, err := bscript.PushDataPrefix(b)
+	if err != nil {
+		return res, err
+	}
+
+	return append(pushDataPrefix, b...), nil
 }
 
 func (opCodeType OpCodeType) GetTypeString() string {

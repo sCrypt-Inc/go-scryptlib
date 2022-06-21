@@ -554,3 +554,38 @@ func serializeState(state string, stateBytes int) (string, error) {
 func isStringEmpty(s string) bool {
 	return len(strings.TrimSpace(s)) == 0
 }
+
+func buildContractState(props *[]StateProp, firstCall bool) (string, error) {
+	var res string
+
+	contractStateVersion := 0
+
+	var sb strings.Builder
+
+	if firstCall {
+		sb.WriteString("01")
+	} else {
+		sb.WriteString("00")
+	}
+
+	for _, stateProp := range *props {
+
+		stateHex, err := stateProp.Value.StateHex()
+
+		if err != nil {
+			return res, err
+		}
+
+		sb.WriteString(stateHex)
+	}
+
+	sbLen := uint32(sb.Len() / 2)
+	if sbLen > 0 {
+		b1, _ := num2bin(Int{big.NewInt(int64(sbLen))}, 4)
+		b2, _ := num2bin(Int{big.NewInt(int64(contractStateVersion))}, 1)
+		sb.WriteString(b1)
+		sb.WriteString(b2)
+	}
+
+	return sb.String(), nil
+}

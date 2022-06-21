@@ -1,7 +1,6 @@
 package scryptlib
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -13,6 +12,7 @@ import (
 	"github.com/libsv/go-bt/v2/bscript"
 	"github.com/libsv/go-bt/v2/bscript/interpreter"
 	"github.com/libsv/go-bt/v2/bscript/interpreter/scriptflag"
+	"github.com/thoas/go-funk"
 )
 
 /*
@@ -72,6 +72,7 @@ type Contract struct {
 	executionContext ExecutionContext
 	file             string
 	contextSet       bool
+	firstCall        bool
 }
 
 // Set values for the contracts constructors parameters.
@@ -203,7 +204,6 @@ func (contract *Contract) SetExecutionContext(ec ExecutionContext) {
 // Constructor parameter values and also the public function parameter values MUST be set.
 func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, error) {
 	// TODO: Check if parameter vals haven't been set yet. Use flags.
-
 	unlockingScript, err := contract.GetUnlockingScript(functionName)
 	if err != nil {
 		return false, err
@@ -231,6 +231,9 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 		prevoutSats := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxSatoshis
 		prevLockingScript := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxScript
 
+		// fmt.Println("unlockingScript", hex.EncodeToString(*unlockingScript))
+		// fmt.Println("lockingScript", hex.EncodeToString(*prevLockingScript))
+		// fmt.Println("Tx", contract.executionContext.Tx.String())
 		engine := interpreter.NewEngine()
 		err = engine.Execute(
 			interpreter.WithTx(
@@ -373,31 +376,7 @@ func (contract *Contract) GetCodePart() (string, error) {
 func (contract *Contract) GetStates() (string, error) {
 	// Get the data part of the locking script. This will contain all the serialized values of statefull variables of the contract.
 	// The data part gets appended to the end of the locking script, seperated by OP_RETURN (0x6a).
-
-	var res string
-
-	contractStateVersion := 0
-
-	var sb strings.Builder
-	for _, stateProp := range contract.stateProps {
-
-		stateHex, err := stateProp.Value.StateHex()
-		if err != nil {
-			return res, err
-		}
-
-		sb.WriteString(stateHex)
-	}
-
-	sbLen := uint32(sb.Len() / 2)
-	if sbLen > 0 {
-		sizeLE := make([]byte, 4)
-		binary.LittleEndian.PutUint32(sizeLE, sbLen)
-		sb.WriteString(fmt.Sprintf("%x", sizeLE))
-		sb.WriteString(fmt.Sprintf("%02x", contractStateVersion))
-	}
-
-	return sb.String(), nil
+	return buildContractState(&contract.stateProps, contract.firstCall)
 }
 
 func (contract *Contract) isStateful() bool {
@@ -504,8 +483,8 @@ func (contract *Contract) SetDataPartInHex(hex string) {
 
 func (contract *Contract) UpdateStateVariable(variableName string, value ScryptType) error {
 	// TODO: Make state variable lookup with a map instead of going through all constructor params.
-	for i := range contract.constructorParams {
-		param := &contract.constructorParams[i]
+	for i := range contract.stateProps {
+		param := &contract.stateProps[i]
 
 		if param.Name != variableName {
 			continue
@@ -516,10 +495,25 @@ func (contract *Contract) UpdateStateVariable(variableName string, value ScryptT
 		}
 
 		param.Value = value
+		contract.firstCall = false
 		return nil
 	}
 
 	return errors.New(fmt.Sprintf("No variable named \"%s\".", variableName))
+}
+
+func (contract *Contract) UpdateStateVariables(states map[string]ScryptType) error {
+	for key, value := range states {
+
+		err := contract.UpdateStateVariable(key, value)
+
+		if err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 }
 
 // Get templates of all struct types defined in the contract. Returns map with struct type names as keys and templates as values.
@@ -533,11 +527,13 @@ func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
 
 // Returns template of a specific struct type defined in the contract.
 func (contract *Contract) GetStructTypeTemplate(structName string) Struct {
-	return contract.structTypes[structName]
+	s := contract.structTypes[structName] //should return copy
+	return s
 }
 
 func (contract *Contract) GetLibraryTypeTemplate(libraryName string) Library {
-	return contract.libraryTypes[libraryName]
+	l := contract.libraryTypes[libraryName] //should return copy
+	return l
 }
 
 func constructAbiPlaceholders(desc map[string]interface{},
@@ -733,7 +729,7 @@ func constructStructTypeItem(typeDescItem StructEntity,
 
 		keysInOrder = append(keysInOrder, pName)
 
-		_, isParamStructType := structDescItemsByTypeString[pName]
+		typeDescItemField, isParamStructType := structDescItemsByTypeString[pType]
 
 		var val ScryptType
 		var err error
@@ -742,7 +738,7 @@ func constructStructTypeItem(typeDescItem StructEntity,
 			emptyDescItemsByTypeString := make(map[string]LibraryEntity)
 			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, emptyDescItemsByTypeString, aliases)
 		} else if isParamStructType {
-			val, err = constructStructTypeItem(typeDescItem, structDescItemsByTypeString, aliases)
+			val, err = constructStructTypeItem(typeDescItemField, structDescItemsByTypeString, aliases)
 		} else {
 			val, err = createPrimitiveTypeWDefaultVal(pTypeResolved)
 		}
@@ -890,6 +886,39 @@ func constructArrayType(typeString string,
 	return Array{items}, nil
 }
 
+// func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
+// 	var res ScryptType
+// 	switch typeString {
+// 	case "bool":
+// 		res = Bool{true}
+// 	case "int":
+// 		res = Int{big.NewInt(0)}
+// 	case "bytes":
+// 		res = Bytes{make([]byte, 0)}
+// 	case "PrivKey":
+// 		res = PrivKey{nil}
+// 	case "PubKey":
+// 		res = PubKey{nil}
+// 	case "Sig":
+// 		res = Sig{nil, 0}
+// 	case "Ripemd160":
+// 		res = Ripemd160{make([]byte, 0)}
+// 	case "Sha1":
+// 		res = Sha1{make([]byte, 0)}
+// 	case "Sha256":
+// 		res = Sha256{make([]byte, 0)}
+// 	case "SigHashType":
+// 		res = SigHashType{make([]byte, 0)}
+// 	case "SigHashPreimage":
+// 		res = SigHashPreimage{make([]byte, 0)}
+// 	case "OpCodeType":
+// 		res = OpCodeType{make([]byte, 0)}
+// 	default:
+// 		return res, fmt.Errorf("unknown type string \"%s\"", typeString)
+// 	}
+// 	return res, nil
+// }
+
 func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
 	var res ScryptType
 	switch typeString {
@@ -898,7 +927,7 @@ func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
 	case "int":
 		res = Int{big.NewInt(0)}
 	case "bytes":
-		res = Bytes{make([]byte, 0)}
+		res = Bytes{[]byte{0x00}}
 	case "PrivKey":
 		res = PrivKey{nil}
 	case "PubKey":
@@ -906,19 +935,19 @@ func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
 	case "Sig":
 		res = Sig{nil, 0}
 	case "Ripemd160":
-		res = Ripemd160{make([]byte, 0)}
+		res = Ripemd160{[]byte{0x00}}
 	case "Sha1":
-		res = Sha1{make([]byte, 0)}
+		res = Sha1{[]byte{0x00}}
 	case "Sha256":
-		res = Sha256{make([]byte, 0)}
+		res = Sha256{[]byte{0x00}}
 	case "SigHashType":
-		res = SigHashType{make([]byte, 0)}
+		res = SigHashType{[]byte{0x00}}
 	case "SigHashPreimage":
-		res = SigHashPreimage{make([]byte, 0)}
+		res = SigHashPreimage{[]byte{0x00}}
 	case "OpCodeType":
-		res = OpCodeType{make([]byte, 0)}
+		res = OpCodeType{[]byte{0x00}}
 	default:
-		return res, errors.New(fmt.Sprintf("Unknown type string \"%s\".", typeString))
+		return res, fmt.Errorf("unknown type string \"%s\"", typeString)
 	}
 	return res, nil
 }
@@ -979,6 +1008,7 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 		structTypes:              structItems,
 		libraryTypes:             libaryItems,
 		contextSet:               false,
+		firstCall:                true,
 	}, nil
 }
 
@@ -1156,4 +1186,38 @@ func (contract *Contract) substituteLibraryParamInTemplate(lockingScriptHex stri
 	}
 
 	return lockingScriptHex, nil
+}
+
+func (contract *Contract) getNewStateScript(states map[string]ScryptType) (*bscript.Script, error) {
+
+	if len(contract.stateProps) == 0 {
+		return nil, fmt.Errorf("contract %s does not have state properties", contract.name)
+	}
+
+	stateProps := funk.Map(contract.stateProps, func(prop StateProp) StateProp {
+
+		clone := prop
+
+		if val, ok := states[prop.Name]; ok {
+			clone.Value = val
+		}
+
+		return clone
+	}).([]StateProp)
+
+	hex, err := buildContractState(&stateProps, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var res *bscript.Script
+
+	codePart, err := contract.GetCodePart()
+	if err != nil {
+		return res, err
+	}
+
+	return bscript.NewFromHexString(codePart + hex)
+
 }

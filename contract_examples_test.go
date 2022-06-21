@@ -181,120 +181,88 @@ func TestContractCounter(t *testing.T) {
 
 }
 
+func increment(t *testing.T, counter *Contract, value Int) bool {
+	prevLockingScript, err := counter.GetLockingScript()
+	assert.NoError(t, err)
+	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+	// Increment counter for next locking script
+
+	states := map[string]ScryptType{
+		"counter": value,
+	}
+
+	newLockingScript, err := counter.getNewStateScript(states)
+	assert.NoError(t, err)
+
+	// Construct TX to derive preimage, which will get used as an contract call input.
+	tx := bt.NewTx()
+	err = tx.From(
+		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458", // Random TXID
+		0,
+		prevLockingScriptHex,
+		5000)
+	assert.NoError(t, err)
+	currOutput := bt.Output{
+		Satoshis:      4800,
+		LockingScript: newLockingScript,
+	}
+	tx.AddOutput(&currOutput)
+
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"txPreimage": SigHashPreimage{preimage},
+		"amount":     Int{big.NewInt(4800)},
+	}
+	err = counter.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	counter.SetExecutionContext(executionContext)
+
+	success, _ := counter.EvaluatePublicFunction("unlock")
+
+	return success
+
+}
+
 func TestContractStateCounter(t *testing.T) {
-	/*
-		compilerResult, err := compilerWrapper.CompileContractFile("./test/res/statecounter.scrypt")
-		assert.NoError(t, err)
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/statecounter.scrypt")
+	assert.NoError(t, err)
 
-		desc, err := compilerResult.ToDescWSourceMap()
-		assert.NoError(t, err)
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
 
-		contractStateCounter, err := NewContractFromDesc(desc)
-		assert.NoError(t, err)
+	contractStateCounter, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
 
-		constructorParams := map[string]ScryptType{
-			"counter": Int{big.NewInt(0)},
-		}
-		err = contractStateCounter.SetConstructorParams(constructorParams)
-		assert.NoError(t, err)
+	constructorParams := map[string]ScryptType{
+		"counter": Int{big.NewInt(0)},
+	}
+	err = contractStateCounter.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
 
-		prevLockingScript, err := contractStateCounter.GetLockingScript()
-		assert.NoError(t, err)
-		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+	assert.Equal(t, true, increment(t, &contractStateCounter, Int{big.NewInt(1)}))
 
-		// Increment counter for next locking script
-		err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(1)})
-		assert.NoError(t, err)
-		currLockingScript, err := contractStateCounter.GetLockingScript()
-		assert.NoError(t, err)
+	//update state after EvaluatePublicFunction success
+	contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(1)})
 
-		// Construct TX to derive preimage, which will get used as an contract call input.
-		tx := bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458", // Random TXID
-			0,
-			prevLockingScriptHex,
-			5000)
-		assert.NoError(t, err)
-		currOutput := bt.Output{
-			Satoshis:      4800,
-			LockingScript: currLockingScript,
-		}
-		tx.AddOutput(&currOutput)
+	assert.Equal(t, true, increment(t, &contractStateCounter, Int{big.NewInt(2)}))
+	contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(2)})
 
-		preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
+	assert.Equal(t, true, increment(t, &contractStateCounter, Int{big.NewInt(3)}))
+	contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(3)})
 
-		unlockParams := map[string]ScryptType{
-			"txPreimage": SigHashPreimage{preimage},
-			"amount":     Int{big.NewInt(4800)},
-		}
-		err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
-		assert.NoError(t, err)
-
-		executionContext := ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
-
-		contractStateCounter.SetExecutionContext(executionContext)
-
-		success, err := contractStateCounter.EvaluatePublicFunction("unlock")
-		assert.NoError(t, err)
-		assert.Equal(t, true, success)
-
-		// Wrong increment:
-		err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(2)})
-		assert.NoError(t, err)
-		currLockingScript, err = contractStateCounter.GetLockingScript()
-		assert.NoError(t, err)
-		tx = bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458", // Random TXID
-			0,
-			prevLockingScriptHex,
-			5000)
-		assert.NoError(t, err)
-		currOutput = bt.Output{
-			Satoshis:      4800,
-			LockingScript: currLockingScript,
-		}
-		tx.AddOutput(&currOutput)
-
-		preimage, err = tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
-
-		unlockParams = map[string]ScryptType{
-			"txPreimage": SigHashPreimage{preimage},
-			"amount":     Int{big.NewInt(4800)},
-		}
-		err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
-		assert.NoError(t, err)
-
-		executionContext = ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
-
-		contractStateCounter.SetExecutionContext(executionContext)
-		success, err = contractStateCounter.EvaluatePublicFunction("unlock")
-		assert.Error(t, err)
-		assert.Equal(t, false, success)
-
-		// Wrong amount:
-		err = contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(1)})
-		assert.NoError(t, err)
-		unlockParams = map[string]ScryptType{
-			"txPreimage": SigHashPreimage{preimage},
-			"amount":     Int{big.NewInt(4799)},
-		}
-		err = contractStateCounter.SetPublicFunctionParams("unlock", unlockParams)
-		success, err = contractStateCounter.EvaluatePublicFunction("unlock")
-		assert.Error(t, err)
-		assert.Equal(t, false, success)
-	*/
+	assert.Equal(t, false, increment(t, &contractStateCounter, Int{big.NewInt(3)}))
+	assert.Equal(t, true, increment(t, &contractStateCounter, Int{big.NewInt(4)}))
+	contractStateCounter.UpdateStateVariable("counter", Int{big.NewInt(4)})
 }
 
 func TestContractDynamicArrayDemo(t *testing.T) {
@@ -318,104 +286,208 @@ func TestContractDynamicArrayDemo(t *testing.T) {
 	assert.Equal(t, true, success)
 }
 
+func TestContractStateExample(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/state.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	st2 := Array{[]ScryptType{example.GetStructTypeTemplate("ST2")}}
+
+	wif_key0, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
+	assert.NoError(t, err)
+	priv0 := wif_key0.PrivKey
+
+	addr := crypto.Hash160(priv0.PubKey().SerialiseCompressed())
+
+	var shf sighash.Flag = sighash.AllForkID
+	sig, err := priv0.Sign([]byte{0x01, 0x01})
+	assert.NoError(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"counter":     Int{big.NewInt(0)},
+		"state_bytes": NewBytes([]byte{0x01, 0x01}),
+		"state_bool":  Bool{true},
+		"privKey":     PrivKey{priv0},
+		"pubkey":      PubKey{priv0.PubKey()},
+		"ripemd160":   Ripemd160{addr},
+		"sha256":      NewSha256([]byte{0x00}),
+		"opCodeType":  NewOpCodeType([]byte{0x00}),
+		"sigHashType": NewSighHashType([]byte{0x41}),
+		"sig":         Sig{sig, shf},
+		"st2":         st2,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	prevLockingScript, err := example.GetLockingScript()
+
+	assert.NoError(t, err)
+	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+	states := map[string]ScryptType{
+		"counter":     Int{big.NewInt(1)},
+		"state_bytes": NewBytes([]byte{0x01, 0x01, 0x01}),
+		"state_bool":  Bool{false},
+		"privKey":     PrivKey{priv0},
+		"pubkey":      PubKey{priv0.PubKey()},
+		"ripemd160":   Ripemd160{addr},
+		"sha256":      NewSha256([]byte{0x00}),
+		"opCodeType":  NewOpCodeType([]byte{0x00}),
+		"sigHashType": NewSighHashType([]byte{0x41}),
+		"sig":         Sig{sig, shf},
+		"st2":         st2,
+	}
+
+	newLockingScript, err := example.getNewStateScript(states)
+
+	assert.NoError(t, err)
+
+	tx := bt.NewTx()
+	err = tx.From(
+		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+		0,
+		prevLockingScriptHex,
+		300000)
+	assert.NoError(t, err)
+	currOutput := bt.Output{
+		Satoshis:      222222,
+		LockingScript: newLockingScript,
+	}
+	tx.AddOutput(&currOutput)
+
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"txPreimage": SigHashPreimage{preimage},
+		"amount":     Int{big.NewInt(222222)},
+	}
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	example.SetExecutionContext(executionContext)
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+	//should update state after EvaluatePublicFunction
+	err = example.UpdateStateVariables(states)
+	assert.NoError(t, err)
+}
+
 func TestContractToken(t *testing.T) {
-	/*
-		wif_key0, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
-		assert.NoError(t, err)
-		priv0 := wif_key0.PrivKey
 
-		wif_key1, err := wif.DecodeWIF("cV1Y7ARUr9Yx7BR55nTdnR7ZXNJphZtCCMBTEZBJe1hXt2kB684q")
-		assert.NoError(t, err)
-		priv1 := wif_key1.PrivKey
+	wif_key0, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
+	assert.NoError(t, err)
+	priv0 := wif_key0.PrivKey
 
-		compilerResult, err := compilerWrapper.CompileContractFile("./test/res/token.scrypt")
-		assert.NoError(t, err)
+	wif_key1, err := wif.DecodeWIF("cV1Y7ARUr9Yx7BR55nTdnR7ZXNJphZtCCMBTEZBJe1hXt2kB684q")
+	assert.NoError(t, err)
+	priv1 := wif_key1.PrivKey
 
-		desc, err := compilerResult.ToDescWSourceMap()
-		assert.NoError(t, err)
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/token.scrypt")
+	assert.NoError(t, err)
 
-		token, err := NewContractFromDesc(desc)
-		assert.NoError(t, err)
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
 
-		new_account0 := token.GetStructTypeTemplate("Account")
-		new_account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
-		new_account0.UpdateValue("balance", Int{big.NewInt(60)})
-		new_account1 := token.GetStructTypeTemplate("Account")
-		new_account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
-		new_account1.UpdateValue("balance", Int{big.NewInt(40)})
-		new_accounts := Array{[]ScryptType{new_account0, new_account1}}
+	token, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
 
-		constructorParams := map[string]ScryptType{
-			"accounts": new_accounts,
-		}
-		err = token.SetConstructorParams(constructorParams)
-		assert.NoError(t, err)
+	new_account0 := token.GetStructTypeTemplate("Account")
+	new_account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
+	new_account0.UpdateValue("balance", Int{big.NewInt(60)})
+	new_account1 := token.GetStructTypeTemplate("Account")
+	new_account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
+	new_account1.UpdateValue("balance", Int{big.NewInt(40)})
+	new_accounts := Array{[]ScryptType{new_account0, new_account1}}
 
-		newLockingScript, err := token.GetLockingScript()
-		assert.NoError(t, err)
+	constructorParams := map[string]ScryptType{
+		"accounts": new_accounts,
+	}
+	err = token.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
 
-		account0 := token.GetStructTypeTemplate("Account")
-		account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
-		account0.UpdateValue("balance", Int{big.NewInt(100)})
-		account1 := token.GetStructTypeTemplate("Account")
-		account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
-		account1.UpdateValue("balance", Int{big.NewInt(0)})
-		accounts := Array{[]ScryptType{account0, account1}}
+	prevLockingScript, err := token.GetLockingScript()
 
-		constructorParams = map[string]ScryptType{
-			"accounts": accounts,
-		}
-		err = token.SetConstructorParams(constructorParams)
-		assert.NoError(t, err)
+	assert.NoError(t, err)
+	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
 
-		prevLockingScript, err := token.GetLockingScript()
-		assert.NoError(t, err)
-		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+	account0 := token.GetStructTypeTemplate("Account")
+	account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
+	account0.UpdateValue("balance", Int{big.NewInt(20)})
+	account1 := token.GetStructTypeTemplate("Account")
+	account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
+	account1.UpdateValue("balance", Int{big.NewInt(80)})
+	accounts := Array{[]ScryptType{account0, account1}}
 
-		tx := bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
-			0,
-			prevLockingScriptHex,
-			300000)
-		assert.NoError(t, err)
-		currOutput := bt.Output{
-			Satoshis:      222222,
-			LockingScript: newLockingScript,
-		}
-		tx.AddOutput(&currOutput)
+	states := map[string]ScryptType{
+		"accounts": accounts,
+	}
 
-		preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
+	newLockingScript, err := token.getNewStateScript(states)
+	assert.NoError(t, err)
 
-		var shf sighash.Flag = sighash.AllForkID
-		sh, err := tx.CalcInputSignatureHash(0, shf)
-		assert.NoError(t, err)
-		senderSig, err := priv0.Sign(sh)
-		assert.NoError(t, err)
+	tx := bt.NewTx()
+	err = tx.From(
+		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+		0,
+		prevLockingScriptHex,
+		300000)
+	assert.NoError(t, err)
+	currOutput := bt.Output{
+		Satoshis:      222222,
+		LockingScript: newLockingScript,
+	}
+	tx.AddOutput(&currOutput)
 
-		unlockParams := map[string]ScryptType{
-			"sender":     PubKey{priv0.PubKey()},
-			"senderSig":  Sig{senderSig, shf},
-			"receiver":   PubKey{priv1.PubKey()},
-			"value":      Int{big.NewInt(40)},
-			"txPreimage": SigHashPreimage{preimage},
-			"amount":     Int{big.NewInt(222222)},
-		}
-		err = token.SetPublicFunctionParams("transfer", unlockParams)
-		assert.NoError(t, err)
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
 
-		executionContext := ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
+	var shf sighash.Flag = sighash.AllForkID
+	sh, err := tx.CalcInputSignatureHash(0, shf)
+	assert.NoError(t, err)
+	senderSig, err := priv0.Sign(sh)
+	assert.NoError(t, err)
 
-		token.SetExecutionContext(executionContext)
-		success, err := token.EvaluatePublicFunction("transfer")
-		assert.NoError(t, err)
-		assert.Equal(t, true, success)
-	*/
+	unlockParams := map[string]ScryptType{
+		"sender":     PubKey{priv0.PubKey()},
+		"senderSig":  Sig{senderSig, shf},
+		"receiver":   PubKey{priv1.PubKey()},
+		"value":      Int{big.NewInt(40)},
+		"txPreimage": SigHashPreimage{preimage},
+		"amount":     Int{big.NewInt(222222)},
+	}
+	err = token.SetPublicFunctionParams("transfer", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	token.SetExecutionContext(executionContext)
+	success, err := token.EvaluatePublicFunction("transfer")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+	//should update state after EvaluatePublicFunction
+	err = token.UpdateStateVariable("accounts", accounts)
+	assert.NoError(t, err)
 }
 
 func TestContractNestedStructArr(t *testing.T) {
