@@ -297,7 +297,9 @@ func TestContractStateExample(t *testing.T) {
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
-	st2 := Array{[]ScryptType{example.GetStructTypeTemplate("ST2")}}
+	st2, err := example.GetStructTypeTemplate("ST2")
+	assert.NoError(t, err)
+	st2a := Array{[]ScryptType{st2}}
 
 	wif_key0, err := wif.DecodeWIF("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
 	assert.NoError(t, err)
@@ -342,7 +344,7 @@ func TestContractStateExample(t *testing.T) {
 		"opCodeType":  NewOpCodeType([]byte{0x00}),
 		"sigHashType": NewSighHashType([]byte{0x41}),
 		"sig":         Sig{sig, shf},
-		"st2":         st2,
+		"st2":         st2a,
 	}
 
 	newLockingScript, err := example.getNewStateScript(states)
@@ -407,10 +409,12 @@ func TestContractToken(t *testing.T) {
 	token, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
-	new_account0 := token.GetStructTypeTemplate("Account")
+	new_account0, err := token.GetStructTypeTemplate("Account")
+	assert.NoError(t, err)
 	new_account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
 	new_account0.UpdateValue("balance", Int{big.NewInt(60)})
-	new_account1 := token.GetStructTypeTemplate("Account")
+	new_account1, err := token.GetStructTypeTemplate("Account")
+	assert.NoError(t, err)
 	new_account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
 	new_account1.UpdateValue("balance", Int{big.NewInt(40)})
 	new_accounts := Array{[]ScryptType{new_account0, new_account1}}
@@ -426,10 +430,12 @@ func TestContractToken(t *testing.T) {
 	assert.NoError(t, err)
 	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
 
-	account0 := token.GetStructTypeTemplate("Account")
+	account0, err := token.GetStructTypeTemplate("Account")
+	assert.NoError(t, err)
 	account0.UpdateValue("pubKey", PubKey{priv0.PubKey()})
 	account0.UpdateValue("balance", Int{big.NewInt(20)})
-	account1 := token.GetStructTypeTemplate("Account")
+	account1, err := token.GetStructTypeTemplate("Account")
+	assert.NoError(t, err)
 	account1.UpdateValue("pubKey", PubKey{priv1.PubKey()})
 	account1.UpdateValue("balance", Int{big.NewInt(80)})
 	accounts := Array{[]ScryptType{account0, account1}}
@@ -529,7 +535,8 @@ func TestContractNestedStructArr(t *testing.T) {
 
 	otherThingsVals := make([]ScryptType, 2)
 	for i := 0; i < 2; i++ {
-		otherThing := nestedStructs.GetStructTypeTemplate("OtherThing")
+		otherThing, err := nestedStructs.GetStructTypeTemplate("OtherThing")
+		assert.NoError(t, err)
 		otherThing.UpdateValue("someBytes", Bytes{make([]byte, 3)})
 		numVals := make([]ScryptType, 3)
 		for j := 0; j < 3; j++ {
@@ -539,7 +546,8 @@ func TestContractNestedStructArr(t *testing.T) {
 		otherThingsVals[i] = otherThing
 	}
 
-	thing := nestedStructs.GetStructTypeTemplate("Thing")
+	thing, err := nestedStructs.GetStructTypeTemplate("Thing")
+	assert.NoError(t, err)
 	thing.UpdateValue("someNumber", Int{big.NewInt(123)})
 	thing.UpdateValue("otherThings", Array{otherThingsVals})
 
@@ -607,7 +615,8 @@ func TestContractLibAsProperty(t *testing.T) {
 	libAsPropertyTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
-	l := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	l, err := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
 	l.UpdateValue("a", Int{big.NewInt(1)})
 	l.UpdateValue("b", Int{big.NewInt(2)})
 
@@ -661,7 +670,8 @@ func TestContractLibAsPropertyWithOutConstructor(t *testing.T) {
 	libAsPropertyTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
-	l := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	l, err := libAsPropertyTest.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
 	l.UpdateValue("x", Int{big.NewInt(2)})
 
 	constructorParams := map[string]ScryptType{
@@ -745,12 +755,13 @@ func TestLibrary1(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	l := library1.GetLibraryTypeTemplate("L")
-
+	l, err := library1.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
 	l.UpdateValue("a", Int{big.NewInt(1)})
 	l.UpdateValue("b", Int{big.NewInt(2)})
 
-	l1 := library1.GetLibraryTypeTemplate("L1")
+	l1, err := library1.GetLibraryTypeTemplate("L1")
+	assert.NoError(t, err)
 	l1.UpdateValue("x", Int{big.NewInt(1)})
 	l1.UpdateValue("l", Array{[]ScryptType{l, l}})
 
@@ -787,12 +798,14 @@ func TestLibrary2(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	st := library2.GetStructTypeTemplate("ST")
+	st, err := library2.GetStructTypeTemplate("ST")
+	assert.NoError(t, err)
 
 	st.UpdateValue("a", Array{[]ScryptType{Int{big.NewInt(4)}, Int{big.NewInt(5)}}})
 	st.UpdateValue("b", Bool{false})
 	st.UpdateValue("c", Bytes{[]byte{0x01, 0xef, 0x02}})
-	l := library2.GetLibraryTypeTemplate("L")
+	l, err := library2.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
 
 	l.UpdateValue("st", st)
 
@@ -828,13 +841,14 @@ func TestLibrary3(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	l := library3.GetLibraryTypeTemplate("L")
+	l, err := library3.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
 
 	l.UpdateValue("a", Int{big.NewInt(1)})
 	l.UpdateValue("b", Int{big.NewInt(2)})
 
-	l1 := library3.GetLibraryTypeTemplate("L1")
-
+	l1, err := library3.GetLibraryTypeTemplate("L1")
+	assert.NoError(t, err)
 	l1.UpdateValue("xx", l)
 
 	constructorParams := map[string]ScryptType{
@@ -870,26 +884,26 @@ func TestLibrary4(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	l1 := library3.GetLibraryTypeTemplate("L1")
-
+	l1, err := library3.GetLibraryTypeTemplate("L1")
+	assert.NoError(t, err)
 	l1.UpdateValue("a", Int{big.NewInt(1)})
 	l1.UpdateValue("b", Int{big.NewInt(2)})
 
-	st := library3.GetStructTypeTemplate("ST")
-
+	st, err := library3.GetStructTypeTemplate("ST")
+	assert.NoError(t, err)
 	st.UpdateValue("x", Int{big.NewInt(2)})
 
-	l2 := library3.GetLibraryTypeTemplate("L2")
-
+	l2, err := library3.GetLibraryTypeTemplate("L2")
+	assert.NoError(t, err)
 	l2.UpdateValue("x", Array{[]ScryptType{st}})
 
-	l3 := library3.GetLibraryTypeTemplate("L3")
-
+	l3, err := library3.GetLibraryTypeTemplate("L3")
+	assert.NoError(t, err)
 	l3.UpdateValue("l1", l1)
 	l3.UpdateValue("l2", l2)
 
-	l4 := library3.GetLibraryTypeTemplate("L4")
-
+	l4, err := library3.GetLibraryTypeTemplate("L4")
+	assert.NoError(t, err)
 	l4.UpdateValue("l3", l3)
 
 	constructorParams := map[string]ScryptType{
@@ -945,7 +959,8 @@ func runPut(t *testing.T, hashedmap *Contract, hm HashedMap, pkh Ripemd160, bala
 	}
 	tx.AddOutput(&currOutput)
 
-	key := hashedmap.GetStructTypeTemplate("Key")
+	key, err := hashedmap.GetStructTypeTemplate("Key")
+	assert.NoError(t, err)
 
 	key.UpdateValue("pkh", pkh)
 
@@ -1023,8 +1038,8 @@ func runDelete(t *testing.T, hashedmap *Contract, hm HashedMap, pkh Ripemd160) {
 	}
 	tx.AddOutput(&currOutput)
 
-	key := hashedmap.GetStructTypeTemplate("Key")
-
+	key, err := hashedmap.GetStructTypeTemplate("Key")
+	assert.NoError(t, err)
 	key.UpdateValue("pkh", pkh)
 
 	key.UpdateValue("keyIndex", Int{big.NewInt(int64(keyIndex))})
@@ -1105,4 +1120,98 @@ func TestContractHashedMap(t *testing.T) {
 
 	runDelete(t, &hashedmap, hm, pkh2)
 
+}
+
+func TestContractLibAsState1(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/LibAsState1.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	st, err := example.GetStructTypeTemplate("ST")
+	assert.NoError(t, err)
+
+	st.UpdateValue("x", Int{big.NewInt(1)})
+	st.UpdateValue("c", Bool{true})
+	st.UpdateValue("aa", Array{[]ScryptType{Int{big.NewInt(1)}, Int{big.NewInt(1)}, Int{big.NewInt(1)}}})
+
+	l, err := example.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
+	l.UpdateValue("x", Int{big.NewInt(1)})
+	l.UpdateValue("st", st)
+
+	constructorParams := map[string]ScryptType{
+		"l": l,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	prevLockingScript, err := example.GetLockingScript()
+
+	assert.NoError(t, err)
+	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+	newst, err := example.GetStructTypeTemplate("ST")
+	assert.NoError(t, err)
+	newst.UpdateValue("x", Int{big.NewInt(1)})
+	newst.UpdateValue("c", Bool{false})
+	newst.UpdateValue("aa", Array{[]ScryptType{Int{big.NewInt(1)}, Int{big.NewInt(1)}, Int{big.NewInt(1)}}})
+
+	newl, err := example.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
+	//when update library state, should using UpdatePropertyValue
+	newl.UpdatePropertyValue("x", Int{big.NewInt(6)})
+	newl.UpdatePropertyValue("st", newst)
+
+	states := map[string]ScryptType{
+		"l": newl,
+	}
+
+	newLockingScript, err := example.getNewStateScript(states)
+
+	assert.NoError(t, err)
+
+	tx := bt.NewTx()
+	err = tx.From(
+		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+		0,
+		prevLockingScriptHex,
+		300000)
+	assert.NoError(t, err)
+	currOutput := bt.Output{
+		Satoshis:      300000,
+		LockingScript: newLockingScript,
+	}
+	tx.AddOutput(&currOutput)
+
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"x":        Int{big.NewInt(1)},
+		"preimage": SigHashPreimage{preimage},
+	}
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	example.SetExecutionContext(executionContext)
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+	//should update state after EvaluatePublicFunction
+	err = example.UpdateStateVariables(states)
+	assert.NoError(t, err)
 }

@@ -146,7 +146,10 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 
 	for idx := range function.Params {
 		paramPlaceholder := &function.Params[idx]
-		value := params[paramPlaceholder.Name]
+		value, ok := params[paramPlaceholder.Name]
+		if !ok {
+			return fmt.Errorf("can not find parameter %s", paramPlaceholder.Name)
+		}
 
 		typePlaceholder := reflect.TypeOf(paramPlaceholder.Value).Name()
 		typeActualParam := reflect.TypeOf(value).Name()
@@ -526,14 +529,21 @@ func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
 }
 
 // Returns template of a specific struct type defined in the contract.
-func (contract *Contract) GetStructTypeTemplate(structName string) Struct {
-	s := contract.structTypes[structName] //should return copy
-	return s
+func (contract *Contract) GetStructTypeTemplate(structName string) (Struct, error) {
+	s, ok := contract.structTypes[structName] //should return copy
+
+	if !ok {
+		return s, fmt.Errorf("struct %s does not exist", structName)
+	}
+	return s, nil
 }
 
-func (contract *Contract) GetLibraryTypeTemplate(libraryName string) Library {
-	l := contract.libraryTypes[libraryName] //should return copy
-	return l
+func (contract *Contract) GetLibraryTypeTemplate(libraryName string) (Library, error) {
+	l, ok := contract.libraryTypes[libraryName] //should return copy
+	if !ok {
+		return l, fmt.Errorf("library %s does not exist", libraryName)
+	}
+	return l, nil
 }
 
 func constructAbiPlaceholders(desc map[string]interface{},

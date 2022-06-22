@@ -206,11 +206,25 @@ func (structType Struct) StateBytes() ([]byte, error) {
 }
 
 func (libraryType Library) StateHex() (string, error) {
-	return libraryType.Hex()
+	b, err := libraryType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (libraryType Library) StateBytes() ([]byte, error) {
-	return libraryType.Bytes()
+	var res []byte
+	var buff bytes.Buffer
+	for _, key := range libraryType.propertyKeysInOrder {
+		elem := libraryType.properties[key]
+		b, err := elem.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		buff.Write(b)
+	}
+	return buff.Bytes(), nil
 }
 
 func (hashedMapType HashedMap) StateHex() (string, error) {
