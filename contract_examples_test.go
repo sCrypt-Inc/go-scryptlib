@@ -322,7 +322,7 @@ func TestContractStateExample(t *testing.T) {
 		"opCodeType":  NewOpCodeType([]byte{0x00}),
 		"sigHashType": NewSighHashType([]byte{0x41}),
 		"sig":         Sig{sig, shf},
-		"st2":         st2,
+		"st2":         st2a,
 	}
 
 	err = example.SetConstructorParams(constructorParams)
@@ -1215,3 +1215,74 @@ func TestContractLibAsState1(t *testing.T) {
 	err = example.UpdateStateVariables(states)
 	assert.NoError(t, err)
 }
+
+// func TestContractHashedmap1(t *testing.T) {
+
+// 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/hashedmap1.scrypt")
+// 	assert.NoError(t, err)
+
+// 	desc, err := compilerResult.ToDescWSourceMap()
+// 	assert.NoError(t, err)
+
+// 	stateMapTest, err := NewContractFromDesc(desc)
+// 	assert.NoError(t, err)
+
+// 	hashedmap := NewHashedMap()
+
+// 	constructorParams := map[string]ScryptType{
+// 		"map": hashedmap,
+// 	}
+
+// 	err = stateMapTest.SetConstructorParams(constructorParams)
+// 	assert.NoError(t, err)
+
+// 	prevLockingScript, err := stateMapTest.GetLockingScript()
+
+// 	assert.NoError(t, err)
+// 	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+// 	states := map[string]ScryptType{
+// 		"map": hashedmap,
+// 	}
+
+// 	newLockingScript, err := stateMapTest.getNewStateScript(states)
+
+// 	assert.NoError(t, err)
+
+// 	tx := bt.NewTx()
+// 	err = tx.From(
+// 		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+// 		0,
+// 		prevLockingScriptHex,
+// 		300000)
+// 	assert.NoError(t, err)
+// 	currOutput := bt.Output{
+// 		Satoshis:      300000,
+// 		LockingScript: newLockingScript,
+// 	}
+// 	tx.AddOutput(&currOutput)
+
+// 	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+// 	assert.NoError(t, err)
+
+// 	unlockParams := map[string]ScryptType{
+// 		"preimage": SigHashPreimage{preimage},
+// 	}
+// 	err = stateMapTest.SetPublicFunctionParams("unlock", unlockParams)
+// 	assert.NoError(t, err)
+
+// 	executionContext := ExecutionContext{
+// 		Tx:       tx,
+// 		InputIdx: 0,
+// 		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+// 	}
+
+// 	stateMapTest.SetExecutionContext(executionContext)
+// 	success, err := stateMapTest.EvaluatePublicFunction("unlock")
+// 	assert.NoError(t, err)
+// 	assert.Equal(t, true, success)
+
+// 	//should update state after EvaluatePublicFunction
+// 	err = stateMapTest.UpdateStateVariables(states)
+// 	assert.NoError(t, err)
+// }
