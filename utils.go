@@ -589,3 +589,72 @@ func buildContractState(props *[]StateProp, firstCall bool) (string, error) {
 
 	return sb.String(), nil
 }
+
+func IsGenericType(t string) bool {
+	match, _ := regexp.MatchString(`^([\w]+)<([\w,[\]\s<>]+)>$`, t)
+	return match
+}
+
+func GetNameByType(t string) string {
+
+	if IsArrayType(t) {
+		typeName, _ := FactorizeArrayTypeString(t)
+		return GetNameByType(typeName)
+	}
+
+	if IsGenericType(t) {
+		tn, _ := ParseGenericType(t)
+		return GetNameByType(tn)
+	}
+
+	return t
+}
+
+/**
+ *
+ * @param type eg. HashedMap<int,int>
+ * @param eg. ["HashedMap", ["int", "int"]}] An array generic types returned by @getGenericDeclaration
+ * @returns {"K": "int", "V": "int"}
+ */
+func ParseGenericType(t string) (string, []string) {
+
+	if IsGenericType(t) {
+		r := regexp.MustCompile(`([\w]+)<([\w,[\]<>\s]+)>$`)
+		matches := r.FindAllStringSubmatch(t, -1)
+
+		if len(matches) == 1 {
+			ln := matches[0][1]
+			realTypes := make([]string, 0)
+
+			tail := matches[0][2]
+
+			brackets := make([]string, 0)
+			tmpType := ""
+
+			for i := 0; i < len(tail); i++ {
+				ch := fmt.Sprintf("%c", tail[i])
+
+				if ch == "<" || ch == "[" {
+					//push
+					brackets = append(brackets, ch)
+				} else if ch == ">" || ch == "]" {
+					//pop
+					brackets = brackets[0 : len(brackets)-1]
+				} else if ch == "," {
+
+					if len(brackets) == 0 {
+						realTypes = append(realTypes, strings.TrimSpace(tmpType))
+						tmpType = ""
+						continue
+					}
+				}
+				tmpType += ch
+			}
+
+			realTypes = append(realTypes, strings.TrimSpace(tmpType))
+			return ln, realTypes
+		}
+	}
+
+	panic(fmt.Errorf("%s is not generic type", t))
+}
