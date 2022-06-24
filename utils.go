@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/libsv/go-bt/v2/bscript"
+	"github.com/thoas/go-funk"
 )
 
 // Factor array declaration string to array type and sizes.
@@ -657,4 +658,26 @@ func ParseGenericType(t string) (string, []string) {
 	}
 
 	panic(fmt.Errorf("%s is not generic type", t))
+}
+
+func DeduceGenericType(t string, genericTypes []string) (map[string]string, error) {
+
+	if IsGenericType(t) {
+		_, actualTypes := ParseGenericType(t)
+
+		if len(actualTypes) != len(genericTypes) {
+			return nil, fmt.Errorf("deduce generic type %s fail", t)
+		}
+
+		i := 0
+		r := funk.Reduce(genericTypes, func(acc map[string]string, genericType string) map[string]string {
+			acc[genericType] = actualTypes[i]
+			i++
+			return acc
+		}, make(map[string]string))
+		return r.(map[string]string), nil
+	}
+
+	return make(map[string]string), nil
+
 }

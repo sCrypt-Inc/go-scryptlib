@@ -62,17 +62,20 @@ type Contract struct {
 	executedPubFunc          string
 	dataPartInASM            string
 	dataPartInHex            string
-	aliases                  map[string]string
+	abis                     []ABIEntity
 	constructorParams        []functionParam
 	stateProps               []StateProp
 	publicFunctions          map[string]publicFunction
-	structTypes              map[string]Struct // Templates of contracts struct types.
+	//structTypes              map[string]Struct // Templates of contracts struct types.
 	// Maps struct names to related templates.
-	libraryTypes     map[string]Library // Templates of contracts libraries.
+	//libraryTypes     map[string]Library // Templates of contracts libraries.
+	typeItems        map[string]interface{}
 	executionContext ExecutionContext
 	file             string
 	contextSet       bool
 	firstCall        bool
+
+	typeResolver func(string) string
 }
 
 // Set values for the contracts constructors parameters.
@@ -234,9 +237,6 @@ func (contract *Contract) EvaluatePublicFunction(functionName string) (bool, err
 		prevoutSats := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxSatoshis
 		prevLockingScript := contract.executionContext.Tx.InputIdx(contract.executionContext.InputIdx).PreviousTxScript
 
-		// fmt.Println("unlockingScript", hex.EncodeToString(*unlockingScript))
-		// fmt.Println("lockingScript", hex.EncodeToString(*prevLockingScript))
-		// fmt.Println("Tx", contract.executionContext.Tx.String())
 		engine := interpreter.NewEngine()
 		err = engine.Execute(
 			interpreter.WithTx(
@@ -520,44 +520,86 @@ func (contract *Contract) UpdateStateVariables(states map[string]ScryptType) err
 }
 
 // Get templates of all struct types defined in the contract. Returns map with struct type names as keys and templates as values.
-func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
-	res := make(map[string]Struct)
-	for key, value := range contract.structTypes {
-		res[key] = value
-	}
-	return res
-}
+// func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
+// 	res := make(map[string]Struct)
+// 	for key, value := range contract.structTypes {
+// 		res[key] = value
+// 	}
+// 	return res
+// }
 
 // Returns template of a specific struct type defined in the contract.
-func (contract *Contract) GetStructTypeTemplate(structName string) (Struct, error) {
-	s, ok := contract.structTypes[structName] //should return copy
+func (contract *Contract) GetStructTypeTemplate(t string) (Struct, error) {
+
+	name := GetNameByType(t)
+	_, ok := contract.typeItems[name] //should return copy
 
 	if !ok {
-		return s, fmt.Errorf("struct %s does not exist", structName)
+		var st Struct
+		return st, fmt.Errorf("struct %s does not exist", name)
 	}
-	return s, nil
+
+	st, err := contract.createDefaultValForType(t)
+
+	return st.(Struct), err
 }
 
 func (contract *Contract) GetLibraryTypeTemplate(libraryName string) (Library, error) {
-	l, ok := contract.libraryTypes[libraryName] //should return copy
+	name := GetNameByType(libraryName)
+	_, ok := contract.typeItems[name] //should return copy
+
 	if !ok {
-		return l, fmt.Errorf("library %s does not exist", libraryName)
+		var l Library
+		return l, fmt.Errorf("library %s does not exist", name)
 	}
-	return l, nil
+
+	l, err := contract.createDefaultValForType(libraryName)
+
+	return l.(Library), err
 }
 
-func constructAbiPlaceholders(desc map[string]interface{},
-	structItems map[string]Struct,
-	libaryItems map[string]Library,
-	aliases map[string]string) ([]functionParam, map[string]publicFunction, error) {
+func (contract *Contract) createDefaultValForType(typeString string) (ScryptType, error) {
+	var res ScryptType
+
+	t := contract.typeResolver(typeString)
+
+	typeName := GetNameByType(t)
+
+	typeItem, ok := contract.typeItems[typeName]
+
+	if IsArrayType(t) {
+		arrVal, err := constructArray(contract, t)
+		if err != nil {
+			return res, err
+		}
+		res = arrVal
+	} else if ok && reflect.TypeOf(typeItem).Name() == "StructEntity" {
+
+		stVal, err := constructStruct(contract, t)
+		if err != nil {
+			return res, err
+		}
+
+		res = stVal
+	} else if ok && reflect.TypeOf(typeItem).Name() == "LibraryEntity" {
+		libVal, err := constructLibrary(contract, t)
+		if err != nil {
+			return res, err
+		}
+		res = libVal
+	} else {
+
+		return createDefaultValForPrimitiveType(typeName)
+	}
+
+	return res, nil
+}
+
+func (contract *Contract) constructAbiPlaceholders() error {
 	var constructorParams []functionParam
 	publicFunctions := make(map[string]publicFunction)
 
-	// TODO: Pass this as a pram instead of recreating it here.
-	structDescItemsByTypeString := getStructItemsByTypeString(desc)
-	libraryDescItemsByTypeString := getLibraryItemsByTypeString(desc)
-
-	for _, abiItem := range desc["abi"].([]ABIEntity) {
+	for _, abiItem := range contract.abis {
 
 		abiItemType := abiItem.Type
 		params := abiItem.Params
@@ -573,36 +615,19 @@ func constructAbiPlaceholders(desc map[string]interface{},
 		}
 
 		for _, param := range params {
-			var value ScryptType
 			pName := param.Name
 			pType := param.Type
 
-			structItem, isStructType := structItems[pType]
-			libaryItem, isLibraryType := libaryItems[pType]
+			val, err := contract.createDefaultValForType(pType)
 
-			if IsArrayType(pType) {
-				arrVal, err := constructArrayType(pType, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-				if err != nil {
-					return nil, publicFunctions, err
-				}
-				value = arrVal
-			} else if isStructType {
-				value = structItem
-			} else if isLibraryType {
-				value = libaryItem
-			} else {
-				// Concrete values.
-				val, err := createPrimitiveTypeWDefaultVal(pType)
-				if err != nil {
-					return nil, publicFunctions, err
-				}
-				value = val
+			if err != nil {
+				return err
 			}
 
 			placeholder := functionParam{
 				Name:       pName,
 				TypeString: pType,
-				Value:      value,
+				Value:      val,
 			}
 
 			if abiItemType == CONSTRUCTOR {
@@ -617,141 +642,119 @@ func constructAbiPlaceholders(desc map[string]interface{},
 		}
 	}
 
-	return constructorParams, publicFunctions, nil
+	contract.constructorParams = constructorParams
+	contract.publicFunctions = publicFunctions
+
+	return nil
 }
 
-func constructStatePropsPlaceholders(desc map[string]interface{},
-	structItems map[string]Struct,
-	libaryItems map[string]Library,
-	aliases map[string]string) ([]StateProp, error) {
+func (contract *Contract) constructStatePropsPlaceholders(stateEntities []StateEntity) error {
 
 	stateProps := make([]StateProp, 0)
 
-	structDescItemsByTypeString := getStructItemsByTypeString(desc)
-	libraryDescItemsByTypeString := getLibraryItemsByTypeString(desc)
+	for _, stateProp := range stateEntities {
 
-	for _, stateProp := range desc["stateProps"].([]StateEntity) {
-
-		var value ScryptType
+		//var value ScryptType
 		pName := stateProp.Name
 		pType := stateProp.Type
 
-		structItem, isStructType := structItems[pType]
-		libaryItem, isLibraryType := libaryItems[pType]
+		val, err := contract.createDefaultValForType(pType)
 
-		if IsArrayType(pType) {
-			arrVal, err := constructArrayType(pType, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-			if err != nil {
-				return nil, err
-			}
-			value = arrVal
-		} else if isStructType {
-			value = structItem
-		} else if isLibraryType {
-			value = libaryItem
-		} else {
-			// Concrete values.
-			val, err := createPrimitiveTypeWDefaultVal(pType)
-			if err != nil {
-				return nil, err
-			}
-			value = val
+		if err != nil {
+			return err
 		}
 
 		placeholder := StateProp{
 			Name:       pName,
 			TypeString: pType,
-			Value:      value,
+			Value:      val,
 		}
 
 		stateProps = append(stateProps, placeholder)
 	}
 
-	return stateProps, nil
+	contract.stateProps = stateProps
+
+	return nil
 }
 
-func getStructItemsByTypeString(desc map[string]interface{}) map[string]StructEntity {
-	res := make(map[string]StructEntity)
+func getTypeItemsFromDesc(desc map[string]interface{}) map[string]interface{} {
+	res := make(map[string]interface{})
 	for _, structItem := range desc["structs"].([]StructEntity) {
 		structType := structItem.Name
 		res[structType] = structItem
 	}
-	return res
-}
 
-func getLibraryItemsByTypeString(desc map[string]interface{}) map[string]LibraryEntity {
-	res := make(map[string]LibraryEntity)
 	for _, libraryItem := range desc["library"].([]LibraryEntity) {
 		typeStr := libraryItem.Name
 		res[typeStr] = libraryItem
 	}
+
+	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
+
+	for key, val := range aliases {
+		if _, contains := res[val]; contains {
+			res[key] = res[val]
+		}
+	}
 	return res
 }
 
-func constructStructTypeItems(structDescItemsByTypeString map[string]StructEntity,
-	aliases map[string]string) (map[string]Struct, error) {
-	res := make(map[string]Struct)
+func getTypeResolverFromDesc(desc map[string]interface{}) func(string) string {
 
-	for typeName, typeItem := range structDescItemsByTypeString {
-		typeItem, err := constructStructTypeItem(typeItem, structDescItemsByTypeString, aliases)
+	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
 
-		if err != nil {
-			return res, err
-		}
-
-		res[typeName] = typeItem
+	return func(t string) string {
+		return ResolveType(t, aliases)
 	}
-
-	return res, nil
 }
 
-func constructLibraryTypeItems(structDescItemsByTypeString map[string]StructEntity,
-	libraryDescItemsByTypeString map[string]LibraryEntity,
-	aliases map[string]string) (map[string]Library, error) {
-	res := make(map[string]Library)
-
-	for typeName, typeItem := range libraryDescItemsByTypeString {
-		typeItem, err := constructLibraryTypeItem(typeItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-		if err != nil {
-			return res, err
-		}
-
-		res[typeName] = typeItem
-	}
-
-	return res, nil
-}
-
-func constructStructTypeItem(typeDescItem StructEntity,
-	structDescItemsByTypeString map[string]StructEntity,
-	aliases map[string]string) (Struct, error) {
+func constructStruct(contract *Contract, typeString string) (Struct, error) {
 
 	var res Struct
 
 	var keysInOrder []string
 	values := make(map[string]ScryptType)
 
-	params := typeDescItem.Params
+	t := contract.typeResolver(typeString)
+
+	name := GetNameByType(t)
+
+	s, ok := contract.typeItems[name]
+
+	if !ok {
+		return res, fmt.Errorf("no sturct %s found", name)
+	}
+
+	structEntity := s.(StructEntity)
+
+	genericTypes, err := DeduceGenericType(t, structEntity.GenericTypes)
+
+	if err != nil {
+		return res, err
+	}
+
+	params := make([]ParamEntity, 0)
+	if len(structEntity.GenericTypes) > 0 {
+		for _, P := range structEntity.Params {
+			actualType, ok := genericTypes[P.Type]
+			if ok {
+				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
+			} else {
+				return res, fmt.Errorf("cannot deduce type of field %s", P.Name)
+			}
+		}
+
+	} else {
+
+		params = append(params, structEntity.Params...)
+	}
+
 	for _, param := range params {
 		pName := param.Name
-		pType := param.Type
-		pTypeResolved := ResolveType(pType, aliases)
-
 		keysInOrder = append(keysInOrder, pName)
 
-		typeDescItemField, isParamStructType := structDescItemsByTypeString[pType]
-
-		var val ScryptType
-		var err error
-
-		if IsArrayType(pTypeResolved) {
-			emptyDescItemsByTypeString := make(map[string]LibraryEntity)
-			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, emptyDescItemsByTypeString, aliases)
-		} else if isParamStructType {
-			val, err = constructStructTypeItem(typeDescItemField, structDescItemsByTypeString, aliases)
-		} else {
-			val, err = createPrimitiveTypeWDefaultVal(pTypeResolved)
-		}
+		val, err := contract.createDefaultValForType(param.Type)
 
 		if err != nil {
 			return res, err
@@ -761,100 +764,68 @@ func constructStructTypeItem(typeDescItem StructEntity,
 	}
 
 	return Struct{
-		typeName:    typeDescItem.Name,
-		keysInOrder: keysInOrder,
-		values:      values,
+		typeName:     structEntity.Name,
+		keysInOrder:  keysInOrder,
+		values:       values,
+		genericTypes: genericTypes,
 	}, nil
 }
 
-func constructParamsTypeItem(params []ParamEntity,
-	structDescItemsByTypeString map[string]StructEntity,
-	libraryDescItemsByTypeString map[string]LibraryEntity,
-	aliases map[string]string) ([]string, map[string]ScryptType, error) {
-
-	values := make(map[string]ScryptType)
-	keys := make([]string, 0)
-
-	for _, param := range params {
-		pName := param.Name
-		pType := param.Type
-
-		keys = append(keys, pName)
-		pTypeResolved := ResolveType(pType, aliases)
-
-		structDescItem, isParamStructType := structDescItemsByTypeString[pTypeResolved]
-		libraryDescItem, isParamLibraryType := libraryDescItemsByTypeString[pTypeResolved]
-
-		var val ScryptType
-		var err error
-
-		if IsArrayType(pTypeResolved) {
-			val, err = constructArrayType(pTypeResolved, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-		} else if isParamStructType {
-			val, err = constructStructTypeItem(structDescItem, structDescItemsByTypeString, aliases)
-		} else if isParamLibraryType {
-			val, err = constructLibraryTypeItem(libraryDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-		} else {
-			val, err = createPrimitiveTypeWDefaultVal(pTypeResolved)
-		}
-
-		if err != nil {
-			return keys, values, err
-		}
-
-		values[pName] = val
-	}
-
-	return keys, values, nil
-
-}
-
-func constructLibraryTypeItem(typeDescItem LibraryEntity,
-	structDescItemsByTypeString map[string]StructEntity,
-	libraryDescItemsByTypeString map[string]LibraryEntity,
-	aliases map[string]string) (Library, error) {
+func constructLibrary(contract *Contract, typeString string) (Library, error) {
 
 	var res Library
 
-	Params := typeDescItem.Params
+	t := contract.typeResolver(typeString)
 
-	// without constructor
-	if len(Params) == 0 && len(typeDescItem.Properties) > 0 {
-		Params = typeDescItem.Properties
+	name := GetNameByType(t)
+
+	l, ok := contract.typeItems[name]
+
+	if !ok {
+		return res, fmt.Errorf("no library %s found", name)
 	}
-	paramsKeys, params, err := constructParamsTypeItem(Params,
-		structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+
+	libraryEntity := l.(LibraryEntity)
+
+	genericTypes, err := DeduceGenericType(t, libraryEntity.GenericTypes)
 
 	if err != nil {
 		return res, err
 	}
 
-	propertiesKeys, properties, err := constructParamsTypeItem(typeDescItem.Properties,
-		structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
+	Params := libraryEntity.Params
+
+	// without constructor
+	if len(Params) == 0 && len(libraryEntity.Properties) > 0 {
+		Params = libraryEntity.Properties
+	}
+
+	paramsKeys, params, err := constructParams(contract, Params, genericTypes)
+
+	if err != nil {
+		return res, err
+	}
+
+	propertiesKeys, properties, err := constructParams(contract, libraryEntity.Params, genericTypes)
 
 	if err != nil {
 		return res, err
 	}
 
 	return Library{
-		typeName:            typeDescItem.Name,
+		typeName:            libraryEntity.Name,
 		paramKeysInOrder:    paramsKeys,
 		params:              params,
 		propertyKeysInOrder: propertiesKeys,
 		properties:          properties,
+		genericTypes:        genericTypes,
 	}, nil
 }
 
-func constructArrayType(typeString string,
-	structDescItemsByTypeString map[string]StructEntity,
-	libraryDescItemsByTypeString map[string]LibraryEntity,
-	aliases map[string]string) (Array, error) {
+func constructArray(contract *Contract, typeString string) (Array, error) {
 
 	var res Array
-	typeName, arraySizes := FactorizeArrayTypeString(typeString)
-
-	structDescItem, isStructType := structDescItemsByTypeString[typeName]
-	libraryDescItem, isLibraryType := libraryDescItemsByTypeString[typeName]
+	elemType, arraySizes := FactorizeArrayTypeString(typeString)
 
 	var items []ScryptType
 	for dimension := len(arraySizes) - 1; dimension >= 0; dimension-- {
@@ -864,16 +835,7 @@ func constructArrayType(typeString string,
 		if dimension == len(arraySizes)-1 {
 			// Last dimension. Create concrete types here.
 			for i := 0; i < nItems; i++ {
-				var item ScryptType
-				var err error
-
-				if isStructType {
-					item, err = constructStructTypeItem(structDescItem, structDescItemsByTypeString, aliases)
-				} else if isLibraryType {
-					item, err = constructLibraryTypeItem(libraryDescItem, structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-				} else {
-					item, err = createPrimitiveTypeWDefaultVal(typeName)
-				}
+				item, err := contract.createDefaultValForType(elemType)
 
 				if err != nil {
 					return res, err
@@ -896,40 +858,46 @@ func constructArrayType(typeString string,
 	return Array{items}, nil
 }
 
-// func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
-// 	var res ScryptType
-// 	switch typeString {
-// 	case "bool":
-// 		res = Bool{true}
-// 	case "int":
-// 		res = Int{big.NewInt(0)}
-// 	case "bytes":
-// 		res = Bytes{make([]byte, 0)}
-// 	case "PrivKey":
-// 		res = PrivKey{nil}
-// 	case "PubKey":
-// 		res = PubKey{nil}
-// 	case "Sig":
-// 		res = Sig{nil, 0}
-// 	case "Ripemd160":
-// 		res = Ripemd160{make([]byte, 0)}
-// 	case "Sha1":
-// 		res = Sha1{make([]byte, 0)}
-// 	case "Sha256":
-// 		res = Sha256{make([]byte, 0)}
-// 	case "SigHashType":
-// 		res = SigHashType{make([]byte, 0)}
-// 	case "SigHashPreimage":
-// 		res = SigHashPreimage{make([]byte, 0)}
-// 	case "OpCodeType":
-// 		res = OpCodeType{make([]byte, 0)}
-// 	default:
-// 		return res, fmt.Errorf("unknown type string \"%s\"", typeString)
-// 	}
-// 	return res, nil
-// }
+func constructParams(contract *Contract, ps []ParamEntity, genericTypes map[string]string) ([]string, map[string]ScryptType, error) {
 
-func createPrimitiveTypeWDefaultVal(typeString string) (ScryptType, error) {
+	values := make(map[string]ScryptType)
+	keys := make([]string, 0)
+
+	params := make([]ParamEntity, 0)
+
+	if len(genericTypes) > 0 {
+		for _, P := range ps {
+			actualType, ok := genericTypes[P.Type]
+			if ok {
+				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
+			} else {
+				return keys, values, fmt.Errorf("cannot deduce type of field %s", P.Name)
+			}
+		}
+
+	} else {
+
+		params = append(params, ps...)
+	}
+
+	for _, param := range params {
+
+		keys = append(keys, param.Name)
+
+		val, err := contract.createDefaultValForType(param.Type)
+
+		if err != nil {
+			return keys, values, err
+		}
+
+		values[param.Name] = val
+	}
+
+	return keys, values, nil
+
+}
+
+func createDefaultValForPrimitiveType(typeString string) (ScryptType, error) {
 	var res ScryptType
 	switch typeString {
 	case "bool":
@@ -967,59 +935,40 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 	var res Contract
 
 	lockingScriptHexTemplate := desc["hex"].(string)
-	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
 
-	structDescItemsByTypeString := getStructItemsByTypeString(desc)
-	libraryDescItemsByTypeString := getLibraryItemsByTypeString(desc)
+	typeItems := getTypeItemsFromDesc(desc)
 
-	structItems, err := constructStructTypeItems(structDescItemsByTypeString, aliases)
-	if err != nil {
-		return res, err
-	}
+	typeResolver := getTypeResolverFromDesc(desc)
 
-	libaryItems, err := constructLibraryTypeItems(structDescItemsByTypeString, libraryDescItemsByTypeString, aliases)
-	if err != nil {
-		return res, err
-	}
+	abis := desc["abi"].([]ABIEntity)
 
-	// structTypes and libraryTypes should also contain keys for aliases.
-	// TODO: Fix aliases for concrete vals.
-	for key, val := range aliases {
-		if _, contains := structItems[val]; contains {
-			structItems[key] = structItems[val]
-		}
-	}
-	for key, val := range aliases {
-		if _, contains := libaryItems[val]; contains {
-			libaryItems[key] = libaryItems[val]
-		}
-	}
-
-	// Initialize constructor parameter placeholders and public functions along its parameter placeholders.
-	constructorParams, publicFunctions, err := constructAbiPlaceholders(desc, structItems, libaryItems, aliases)
-	if err != nil {
-		return res, err
-	}
-
-	stateProps, err := constructStatePropsPlaceholders(desc, structItems, libaryItems, aliases)
-
-	if err != nil {
-		return res, err
-	}
-
-	return Contract{
+	c := Contract{
 		file:                     desc["file"].(string),
 		name:                     desc["contract"].(string),
 		lockingScriptHexTemplate: lockingScriptHexTemplate,
-		aliases:                  aliases,
-		constructorParams:        constructorParams,
-		stateProps:               stateProps,
-		publicFunctions:          publicFunctions,
-		structTypes:              structItems,
-		libraryTypes:             libaryItems,
+		abis:                     abis,
+		constructorParams:        make([]functionParam, 0),
+		stateProps:               make([]StateProp, 0),
+		publicFunctions:          make(map[string]publicFunction),
+		typeResolver:             typeResolver,
+		typeItems:                typeItems,
 		contextSet:               false,
 		firstCall:                true,
-	}, nil
+	}
+
+	err := c.constructAbiPlaceholders()
+
+	if err != nil {
+		return res, err
+	}
+
+	err = c.constructStatePropsPlaceholders(desc["stateProps"].([]StateEntity))
+
+	if err != nil {
+		return res, err
+	}
+
+	return c, nil
 }
 
 // Creates a new instance of Contract type.

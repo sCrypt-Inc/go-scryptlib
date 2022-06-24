@@ -1286,3 +1286,42 @@ func TestContractLibAsState1(t *testing.T) {
 // 	err = stateMapTest.UpdateStateVariables(states)
 // 	assert.NoError(t, err)
 // }
+
+func TestContractGenericSimple(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst_simple.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	a, err := example.GetStructTypeTemplate("ST<int>")
+	assert.NoError(t, err)
+
+	err = a.UpdateValue("x", Int{big.NewInt(1)})
+	assert.NoError(t, err)
+	err = a.UpdateValue("x", Bool{true})
+
+	assert.Error(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"a": a,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"a": a,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}

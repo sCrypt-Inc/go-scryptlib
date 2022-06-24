@@ -651,9 +651,10 @@ func (arr Array) MarshalJSON() ([]byte, error) {
 }
 
 type Struct struct {
-	typeName    string
-	keysInOrder []string
-	values      map[string]ScryptType
+	typeName     string
+	keysInOrder  []string
+	values       map[string]ScryptType
+	genericTypes map[string]string
 }
 
 func (structType Struct) Hex() (string, error) {
@@ -683,21 +684,35 @@ func (structType Struct) Bytes() ([]byte, error) {
 	return buff.Bytes(), nil
 }
 
-func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) {
-	// TODO: Is there a more efficient way to do value updates?
+func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) error {
 	newVals := make(map[string]ScryptType)
 	for key, val := range structType.values {
 		if key == fieldName {
+			if newVal.GetTypeString() != val.GetTypeString() {
+				return fmt.Errorf("type of field %s should be %s, but got %s", fieldName, val.GetTypeString(), newVal.GetTypeString())
+			}
 			newVals[key] = newVal
 		} else {
 			newVals[key] = val
 		}
 	}
 	structType.values = newVals
+
+	return nil
 }
 
 func (structType Struct) GetTypeString() string {
-	return structType.typeName
+
+	if len(structType.genericTypes) == 0 {
+		return structType.typeName
+	}
+
+	ts := make([]string, 0)
+	for _, val := range structType.genericTypes {
+		ts = append(ts, val)
+	}
+
+	return fmt.Sprintf("%s<%s>", structType.typeName, strings.Join(ts, ","))
 }
 
 func (structType Struct) MarshalJSON() ([]byte, error) {
@@ -717,6 +732,7 @@ type Library struct {
 	params              map[string]ScryptType
 	propertyKeysInOrder []string
 	properties          map[string]ScryptType
+	genericTypes        map[string]string
 }
 
 func (libraryType Library) ctor() bool {
@@ -786,7 +802,17 @@ func (libraryType *Library) UpdatePropertyValue(propertyName string, newVal Scry
 }
 
 func (libraryType Library) GetTypeString() string {
-	return libraryType.typeName
+
+	if len(libraryType.genericTypes) == 0 {
+		return libraryType.typeName
+	}
+
+	ts := make([]string, 0)
+	for _, val := range libraryType.genericTypes {
+		ts = append(ts, val)
+	}
+
+	return fmt.Sprintf("%s<%s>", libraryType.typeName, strings.Join(ts, ","))
 }
 
 func (libraryType Library) MarshalJSON() ([]byte, error) {
@@ -891,6 +917,10 @@ func (hashedMapType HashedMap) Bytes() ([]byte, error) {
 		buff.Write(val[:])
 	}
 
+	if buff.Len() == 0 {
+		return []byte{0x00}, nil
+	}
+
 	return buff.Bytes(), nil
 }
 
@@ -979,6 +1009,10 @@ func (hashedSetType HashedSet) Bytes() ([]byte, error) {
 	keysSorted := hashedSetType.GetKeysSorted()
 	for _, k := range keysSorted {
 		buff.Write(k[:])
+	}
+
+	if buff.Len() == 0 {
+		return []byte{0x00}, nil
 	}
 
 	return buff.Bytes(), nil
