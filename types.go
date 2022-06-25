@@ -650,11 +650,16 @@ func (arr Array) MarshalJSON() ([]byte, error) {
 	return json.Marshal(arr.values)
 }
 
+type GenericType struct {
+	Generic string
+	Actual  string
+}
+
 type Struct struct {
 	typeName     string
 	keysInOrder  []string
 	values       map[string]ScryptType
-	genericTypes map[string]string
+	genericTypes []GenericType
 }
 
 func (structType Struct) Hex() (string, error) {
@@ -709,7 +714,7 @@ func (structType Struct) GetTypeString() string {
 
 	ts := make([]string, 0)
 	for _, val := range structType.genericTypes {
-		ts = append(ts, val)
+		ts = append(ts, val.Actual)
 	}
 
 	return fmt.Sprintf("%s<%s>", structType.typeName, strings.Join(ts, ","))
@@ -732,7 +737,7 @@ type Library struct {
 	params              map[string]ScryptType
 	propertyKeysInOrder []string
 	properties          map[string]ScryptType
-	genericTypes        map[string]string
+	genericTypes        []GenericType
 }
 
 func (libraryType Library) ctor() bool {
@@ -809,7 +814,7 @@ func (libraryType Library) GetTypeString() string {
 
 	ts := make([]string, 0)
 	for _, val := range libraryType.genericTypes {
-		ts = append(ts, val)
+		ts = append(ts, val.Actual)
 	}
 
 	return fmt.Sprintf("%s<%s>", libraryType.typeName, strings.Join(ts, ","))

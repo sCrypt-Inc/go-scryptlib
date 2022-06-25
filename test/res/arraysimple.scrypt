@@ -1,0 +1,7 @@
+
+contract C {
+    int[2][3][1] a;
+    public function unlock(int[2][3][1] a) {
+        require(this.a == a);
+    }
+}

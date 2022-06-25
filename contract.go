@@ -192,10 +192,11 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 // Returns if the contracts execution context was already set at least once.
 func (contract *Contract) checkParamValue(param *functionParam, value ScryptType) error {
 
-	t := contract.typeResolver(param.TypeString)
-	if t != value.GetTypeString() {
+	ExpectedType := contract.typeResolver(param.TypeString)
+	ValueType := value.GetTypeString()
+	if ExpectedType != ValueType {
 		errMsg := fmt.Sprintf("Passed item of type \"%s\" for parameter with name \"%s\". Expected \"%s\".",
-			value.GetTypeString(), param.Name, param.TypeString)
+			ExpectedType, param.Name, ValueType)
 		return errors.New(errMsg)
 	}
 
@@ -560,6 +561,23 @@ func (contract *Contract) GetLibraryTypeTemplate(libraryName string) (Library, e
 	return l.(Library), err
 }
 
+func (contract *Contract) GetTypeTemplate(t string) (ScryptType, error) {
+
+	st, err := contract.GetStructTypeTemplate(t)
+
+	if err == nil {
+		return st, nil
+	}
+
+	l, err := contract.GetLibraryTypeTemplate(t)
+
+	if err == nil {
+		return l, nil
+	}
+
+	return contract.createDefaultValForType(t)
+}
+
 func (contract *Contract) createDefaultValForType(typeString string) (ScryptType, error) {
 	var res ScryptType
 
@@ -761,11 +779,18 @@ func constructStruct(contract *Contract, typeString string) (Struct, error) {
 		values[pName] = val
 	}
 
+	gts := funk.Map(structEntity.GenericTypes, func(generic string) GenericType {
+		return GenericType{
+			Generic: generic,
+			Actual:  genericTypes[generic],
+		}
+	}).([]GenericType)
+
 	return Struct{
 		typeName:     structEntity.Name,
 		keysInOrder:  keysInOrder,
 		values:       values,
-		genericTypes: genericTypes,
+		genericTypes: gts,
 	}, nil
 }
 
@@ -810,13 +835,20 @@ func constructLibrary(contract *Contract, typeString string) (Library, error) {
 		return res, err
 	}
 
+	gts := funk.Map(libraryEntity.GenericTypes, func(generic string) GenericType {
+		return GenericType{
+			Generic: generic,
+			Actual:  genericTypes[generic],
+		}
+	}).([]GenericType)
+
 	return Library{
 		typeName:            libraryEntity.Name,
 		paramKeysInOrder:    paramsKeys,
 		params:              params,
 		propertyKeysInOrder: propertiesKeys,
 		properties:          properties,
-		genericTypes:        genericTypes,
+		genericTypes:        gts,
 	}, nil
 }
 
@@ -1008,29 +1040,28 @@ func (contract *Contract) substituteParamInTemplate(lockingScriptHex string, ele
 
 }
 
+func subscript(index int, arraySizes []string) string {
+
+	if len(arraySizes) > 1 {
+		subArraySizes := arraySizes[1:]
+		offset := funk.Reduce(subArraySizes, func(acc int, val string) int {
+			size, _ := strconv.Atoi(val)
+			return acc * size
+		}, 1).(int)
+		return fmt.Sprintf("[%d]%s", index/offset, subscript(index%offset, subArraySizes))
+	}
+
+	return fmt.Sprintf("[%d]", index)
+}
+
 func (contract *Contract) substituteArrayParamInTemplate(lockingScriptHex string, arr Array, paramName string) (string, error) {
 	elems := FlattenArray(arr)
 	_, sizes := FactorizeArrayTypeString(arr.GetTypeString())
 	for i := 0; i < len(elems); i++ {
 		elem := elems[i]
 
-		indexes := make([]int, len(sizes))
-		offsetMult := 1
-		for j := len(sizes) - 1; j >= 0; j-- {
-			size, err := strconv.Atoi(sizes[j])
-			if err != nil {
-				return "", err
-			}
-
-			offsetMult *= size
-			indexes[j] = i % offsetMult
-		}
-
-		var sb strings.Builder
-		for _, index := range indexes {
-			sb.WriteString(fmt.Sprintf("[%d]", index))
-		}
-		toReplace := fmt.Sprintf("%s%s", paramName, sb.String())
+		subScript := subscript(i, sizes)
+		toReplace := fmt.Sprintf("%s%s", paramName, subScript)
 
 		switch reflect.TypeOf(elem).Name() {
 		case "Struct":

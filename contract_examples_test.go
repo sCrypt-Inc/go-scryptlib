@@ -694,6 +694,39 @@ func TestContractLibAsPropertyWithOutConstructor(t *testing.T) {
 
 }
 
+func TestContractArraySimple(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/arraysimple.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	a, err := example.GetTypeTemplate("int[2][3][1]")
+	assert.NoError(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"a": a,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"a": a,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
 func TestContractArray(t *testing.T) {
 
 	source := `
@@ -1568,6 +1601,275 @@ func TestContractGenericsst(t *testing.T) {
 
 	err = example.SetPublicFunctionParams("unlock", unlockParams)
 	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestContractGenericsst1(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst1.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	l, err := example.GetLibraryTypeTemplate("L<ST1<ST0<ST2[2]>>>")
+	assert.NoError(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"l": l,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	st2, err := example.GetStructTypeTemplate("ST2")
+	assert.NoError(t, err)
+
+	st2.UpdateValue("x", Int{big.NewInt(111)})
+
+	st0, err := example.GetStructTypeTemplate("ST0<ST2[2]>")
+	assert.NoError(t, err)
+
+	err = st0.UpdateValue("y", Array{[]ScryptType{st2, st2}})
+	assert.NoError(t, err)
+	v, err := example.GetStructTypeTemplate("ST1<ST0<ST2[2]>>")
+	assert.NoError(t, err)
+
+	err = v.UpdateValue("x", st0)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"v": v,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestContractGenericsst2(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst2.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	a, err := example.GetStructTypeTemplate("ST0<int[3], bool[1]>")
+	assert.NoError(t, err)
+
+	l, err := example.GetLibraryTypeTemplate("L<ST0<int[3], bool[1]>>")
+	assert.NoError(t, err)
+
+	l.UpdateValue("x", a)
+
+	constructorParams := map[string]ScryptType{
+		"a": a,
+		"l": l,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	aa, err := example.GetStructTypeTemplate("ST0<int, bool>")
+	assert.NoError(t, err)
+
+	err = aa.UpdateValue("x", Bool{true})
+	assert.NoError(t, err)
+
+	err = aa.UpdateValue("y", Int{big.NewInt(1)})
+	assert.NoError(t, err)
+
+	aaa, err := example.GetStructTypeTemplate("ST0<int[3], bool[1]>")
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"aa":  aa,
+		"aaa": aaa,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestContractGenericsst4(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst4.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	l, err := example.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"l": l,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	a, err := example.GetStructTypeTemplate("ST0<int[3], bool[1]>")
+	assert.NoError(t, err)
+
+	b, err := example.GetStructTypeTemplate("ST0<bool, bytes>")
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"a": a,
+		"b": b,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestContractGenericsst6(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst6.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	st0, err := example.GetStructTypeTemplate("ST0<int[2], int>")
+	assert.NoError(t, err)
+
+	st0.UpdateValue("x", Int{big.NewInt(1)})
+	st0.UpdateValue("y", Array{[]ScryptType{Int{big.NewInt(2)}, Int{big.NewInt(3)}}})
+
+	st1, err := example.GetStructTypeTemplate("ST1<int[2], int>")
+	assert.NoError(t, err)
+
+	st1.UpdateValue("x", st0)
+	st1.UpdateValue("y", Array{[]ScryptType{Int{big.NewInt(4)}, Int{big.NewInt(5)}}})
+
+	st2, err := example.GetStructTypeTemplate("ST2<int>")
+	assert.NoError(t, err)
+
+	st2.UpdateValue("x", st1)
+	st2.UpdateValue("y", Int{big.NewInt(100)})
+
+	l, err := example.GetLibraryTypeTemplate("L")
+	assert.NoError(t, err)
+
+	l.UpdateValue("st2", st2)
+
+	constructorParams := map[string]ScryptType{
+		"l": l,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"st2": st2,
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("unlock")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}
+
+func TestContractGenericsst8(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst8.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	st0, err := example.GetStructTypeTemplate("ST0<int>")
+	assert.NoError(t, err)
+
+	constructorParams := map[string]ScryptType{
+		"st": st0,
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	tx := bt.NewTx()
+
+	lockingScript, err := example.GetLockingScript()
+	assert.NoError(t, err)
+	lockingScriptHex := hex.EncodeToString(*lockingScript)
+	err = tx.From(
+		"a3865bd4351665c7531a4311f250c1eac5d6775da5ced72b4b83cfee625b6947", // Random TXID
+		0,
+		lockingScriptHex,
+		5000)
+	assert.NoError(t, err)
+
+	st0_, err := example.GetStructTypeTemplate("ST0<int>")
+
+	assert.NoError(t, err)
+
+	st0_.UpdateValue("x", Int{big.NewInt(1)})
+	st0_.UpdateValue("y", Int{big.NewInt(1)})
+
+	states := map[string]ScryptType{
+		"st": st0_,
+	}
+
+	newLockingScript, err := example.getNewStateScript(states)
+	assert.NoError(t, err)
+
+	tx.AddOutput(&bt.Output{
+		Satoshis:      5000,
+		LockingScript: newLockingScript,
+	})
+
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"txPreimage": SigHashPreimage{preimage},
+	}
+
+	err = example.SetPublicFunctionParams("unlock", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	example.SetExecutionContext(executionContext)
 
 	success, err := example.EvaluatePublicFunction("unlock")
 	assert.NoError(t, err)
