@@ -32,18 +32,6 @@ type StateProp struct {
 	Value      ScryptType
 }
 
-func (param *functionParam) setParamValue(value ScryptType) error {
-	// TODO: TypeString should already be resolved so make sure the parameter values that get to here are too!
-	if param.TypeString != value.GetTypeString() {
-		errMsg := fmt.Sprintf("Passed item of type \"%s\" for parameter with name \"%s\". Expected \"%s\".",
-			value.GetTypeString(), param.Name, param.TypeString)
-		return errors.New(errMsg)
-	}
-
-	param.Value = value
-	return nil
-}
-
 type publicFunction struct {
 	FunctionName string
 	Index        int
@@ -123,10 +111,13 @@ func (contract *Contract) SetConstructorParams(params map[string]ScryptType) err
 			}
 		}
 
-		err := paramPlaceholder.setParamValue(value)
+		err := contract.checkParamValue(paramPlaceholder, value)
+
 		if err != nil {
 			return err
 		}
+
+		paramPlaceholder.Value = value
 	}
 
 	return nil
@@ -186,7 +177,26 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 			}
 		}
 
-		paramPlaceholder.setParamValue(value)
+		err := contract.checkParamValue(paramPlaceholder, value)
+
+		if err != nil {
+			return err
+		}
+
+		paramPlaceholder.Value = value
+	}
+
+	return nil
+}
+
+// Returns if the contracts execution context was already set at least once.
+func (contract *Contract) checkParamValue(param *functionParam, value ScryptType) error {
+
+	t := contract.typeResolver(param.TypeString)
+	if t != value.GetTypeString() {
+		errMsg := fmt.Sprintf("Passed item of type \"%s\" for parameter with name \"%s\". Expected \"%s\".",
+			value.GetTypeString(), param.Name, param.TypeString)
+		return errors.New(errMsg)
 	}
 
 	return nil
@@ -519,18 +529,10 @@ func (contract *Contract) UpdateStateVariables(states map[string]ScryptType) err
 	return nil
 }
 
-// Get templates of all struct types defined in the contract. Returns map with struct type names as keys and templates as values.
-// func (contract *Contract) GetStructTypeTemplates() map[string]Struct {
-// 	res := make(map[string]Struct)
-// 	for key, value := range contract.structTypes {
-// 		res[key] = value
-// 	}
-// 	return res
-// }
-
 // Returns template of a specific struct type defined in the contract.
 func (contract *Contract) GetStructTypeTemplate(t string) (Struct, error) {
 
+	t = contract.typeResolver(t)
 	name := GetNameByType(t)
 	_, ok := contract.typeItems[name] //should return copy
 
@@ -740,8 +742,10 @@ func constructStruct(contract *Contract, typeString string) (Struct, error) {
 			actualType, ok := genericTypes[P.Type]
 			if ok {
 				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
-			} else {
+			} else if funk.Contains(structEntity.GenericTypes, P.Type) {
 				return res, fmt.Errorf("cannot deduce type of field %s", P.Name)
+			} else { //maybe a real type, such as int
+				params = append(params, ParamEntity{Name: P.Name, Type: P.Type})
 			}
 		}
 
@@ -858,20 +862,20 @@ func constructArray(contract *Contract, typeString string) (Array, error) {
 	return Array{items}, nil
 }
 
-func constructParams(contract *Contract, ps []ParamEntity, genericTypes map[string]string) ([]string, map[string]ScryptType, error) {
+func constructParams(contract *Contract, ps []ParamEntity, genericTypesMap map[string]string) ([]string, map[string]ScryptType, error) {
 
 	values := make(map[string]ScryptType)
 	keys := make([]string, 0)
 
 	params := make([]ParamEntity, 0)
 
-	if len(genericTypes) > 0 {
+	if len(genericTypesMap) > 0 {
 		for _, P := range ps {
-			actualType, ok := genericTypes[P.Type]
+			actualType, ok := genericTypesMap[P.Type]
 			if ok {
 				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
-			} else {
-				return keys, values, fmt.Errorf("cannot deduce type of field %s", P.Name)
+			} else { //maybe a real type, such as int
+				params = append(params, ParamEntity{Name: P.Name, Type: P.Type})
 			}
 		}
 

@@ -64,13 +64,6 @@ func IsArrayType(typeStr string) bool {
 	return match
 }
 
-// Check if string is of a struct type.
-// e.g. "struct Point {}"
-//func IsStructType(typeStr string) bool {
-//	match, _ := regexp.MatchString(`^struct\s(\w+)\s\{\}$`, typeStr)
-//	return match
-//}
-
 // Check if string is a basic sCrypt type.
 // e.g. "int", "bool", "bytes" ...
 func IsBasicScryptType(typeStr string) bool {
@@ -78,21 +71,22 @@ func IsBasicScryptType(typeStr string) bool {
 	return res
 }
 
-// Returns struct name from type string.
-// e.g.: 'struct ST1 {}[2][2][2]' -> 'ST1'.
-//func GetStructNameByType(typeName string) string {
-//	r := regexp.MustCompile(`^struct\s(\w+)\s\{\}.*$`)
-//	match := r.FindStringSubmatch(typeName)
-//	if match != nil {
-//		return match[1]
-//	}
-//	return ""
-//}
-
 func ResolveType(typeStr string, aliases map[string]string) string {
 	if IsArrayType(typeStr) {
 		typeName, arraySizes := FactorizeArrayTypeString(typeStr)
 		return ToLiteralArrayTypeStr(ResolveType(typeName, aliases), arraySizes)
+	}
+
+	if IsGenericType(typeStr) {
+		name, actualTypes := ParseGenericType(typeStr)
+
+		n := ResolveType(name, aliases)
+
+		gts := funk.Map(actualTypes, func(actualType string) string {
+			return ResolveType(actualType, aliases)
+		}).([]string)
+
+		return fmt.Sprintf("%s<%s>", n, strings.Join(gts, ","))
 	}
 
 	if typeStr == "PubKeyHash" {
