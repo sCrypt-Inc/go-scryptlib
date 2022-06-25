@@ -1,0 +1,34 @@
+struct ST0<T> {
+    int x;
+    T y;
+}
+
+struct ST1<T> {
+    T x;
+}
+
+struct ST2 {
+    int x;
+}
+
+struct ST3<T> {
+    T x;
+    ST0<T> st0;
+}
+
+contract C {
+    
+    ST1<int> a;
+    ST1<int[3]> b;
+    ST1<ST0<int> > c;
+    ST1<ST2[2]> d;
+
+  
+    public function unlock(ST3<ST1<ST0<ST2[3]>>[2]> a) {
+        ST2[3] st2a = [{1}, {2}, {3}];
+        ST0<ST2[3]> st0 = {11, st2a};
+        ST1<ST0<ST2[3]>>[2] st1a = [{st0}, {st0}];
+        ST3<ST1<ST0<ST2[3]>>[2]> a_ = {st1a, {111, st1a}};
+        require(a_ == a);
+    }
+}

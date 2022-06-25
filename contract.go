@@ -739,14 +739,8 @@ func constructStruct(contract *Contract, typeString string) (Struct, error) {
 	params := make([]ParamEntity, 0)
 	if len(structEntity.GenericTypes) > 0 {
 		for _, P := range structEntity.Params {
-			actualType, ok := genericTypes[P.Type]
-			if ok {
-				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
-			} else if funk.Contains(structEntity.GenericTypes, P.Type) {
-				return res, fmt.Errorf("cannot deduce type of field %s", P.Name)
-			} else { //maybe a real type, such as int
-				params = append(params, ParamEntity{Name: P.Name, Type: P.Type})
-			}
+			actualType := DeduceActualType(P.Type, genericTypes)
+			params = append(params, ParamEntity{Name: P.Name, Type: actualType})
 		}
 
 	} else {
@@ -871,12 +865,8 @@ func constructParams(contract *Contract, ps []ParamEntity, genericTypesMap map[s
 
 	if len(genericTypesMap) > 0 {
 		for _, P := range ps {
-			actualType, ok := genericTypesMap[P.Type]
-			if ok {
-				params = append(params, ParamEntity{Name: P.Name, Type: actualType})
-			} else { //maybe a real type, such as int
-				params = append(params, ParamEntity{Name: P.Name, Type: P.Type})
-			}
+			actualType := DeduceActualType(P.Type, genericTypesMap)
+			params = append(params, ParamEntity{Name: P.Name, Type: actualType})
 		}
 
 	} else {

@@ -135,5 +135,15 @@ func Test_ParseGenericType(t *testing.T) {
 	name, ts = ParseGenericType("ST0<ST0<int,int>,int>")
 	assert.Equal(t, name, "ST0")
 	assert.Equal(t, ts, []string{"ST0<int,int>", "int"})
+}
+
+func Test_FactorizeArrayTypeString(t *testing.T) {
+	typeName, arraySizes := FactorizeArrayTypeString("L<int>[2][2]")
+	assert.Equal(t, typeName, "L<int>")
+	assert.Equal(t, arraySizes, []string{"2", "2"})
+
+	typeName, arraySizes = FactorizeArrayTypeString("ST1<ST0<ST2[3]>>[2]")
+	assert.Equal(t, typeName, "ST1<ST0<ST2[3]>>")
+	assert.Equal(t, arraySizes, []string{"2"})
 
 }

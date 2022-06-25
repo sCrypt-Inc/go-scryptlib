@@ -21,13 +21,20 @@ import (
 func FactorizeArrayTypeString(typeStr string) (string, []string) {
 	var arraySizes []string
 
+	typeName := strings.Split(typeStr, "[")[0]
+
+	sizeParts := typeStr[strings.Index(typeStr, "["):]
+
+	if strings.Contains(typeStr, ">") {
+		typeName = typeStr[0 : strings.LastIndex(typeStr, ">")+1]
+		sizeParts = typeStr[strings.LastIndex(typeStr, ">")+1:]
+	}
+
 	r := regexp.MustCompile(`\[([\w.]+)\]+`)
-	matches := r.FindAllStringSubmatch(typeStr, -1)
+	matches := r.FindAllStringSubmatch(sizeParts, -1)
 	for _, match := range matches {
 		arraySizes = append(arraySizes, match[1])
 	}
-
-	typeName := strings.Split(typeStr, "[")[0]
 
 	return typeName, arraySizes
 }
@@ -674,4 +681,30 @@ func DeduceGenericType(t string, genericTypes []string) (map[string]string, erro
 
 	return make(map[string]string), nil
 
+}
+
+func DeduceActualType(t string, genericTypes map[string]string) string {
+
+	if IsGenericType(t) {
+		name, gts := ParseGenericType(t)
+
+		gts_ := funk.Map(gts, func(t string) string {
+
+			at := DeduceActualType(t, genericTypes)
+
+			return at
+		}).([]string)
+
+		return fmt.Sprintf("%s<%s>", name, strings.Join(gts_, ","))
+	} else if IsArrayType(t) {
+		name, arraySizes := FactorizeArrayTypeString(t)
+		name_ := DeduceActualType(name, genericTypes)
+		return ToLiteralArrayTypeStr(name_, arraySizes)
+	}
+
+	if funk.Contains(genericTypes, t) {
+		return genericTypes[t]
+	}
+
+	return t
 }
