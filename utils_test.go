@@ -109,6 +109,21 @@ func Test_flattenSha256(t *testing.T) {
 
 	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 
+	s, _ = FlattenSHA256(Int{big.NewInt(1)})
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
+
+	s, _ = FlattenSHA256(NewHashedMap())
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+	m := NewHashedMap()
+	m.Set(Int{big.NewInt(1)}, Int{big.NewInt(11)})
+
+	h, _ := m.Hex()
+
+	assert.Equal(t, h, "404bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459ae7cf46a078fed4fafd0b5e3aff144802b853f8ae459a4f0c14add3314b7cc3a6")
+
 }
 
 func Test_ParseGenericType(t *testing.T) {

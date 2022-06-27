@@ -228,9 +228,29 @@ func (libraryType Library) StateBytes() ([]byte, error) {
 }
 
 func (hashedMapType HashedMap) StateHex() (string, error) {
-	return hashedMapType.Hex()
+
+	b, err := hashedMapType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
+
 }
 
 func (hashedMapType HashedMap) StateBytes() ([]byte, error) {
+
 	return hashedMapType.Bytes()
+}
+
+func (hashedSetType HashedSet) StateHex() (string, error) {
+	b, err := hashedSetType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
+}
+
+func (hashedSetType HashedSet) StateBytes() ([]byte, error) {
+
+	return hashedSetType.Bytes()
 }

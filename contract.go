@@ -638,6 +638,15 @@ func (contract *Contract) constructAbiPlaceholders() error {
 			pName := param.Name
 			pType := param.Type
 
+			if IsGenericType(pType) {
+
+				name := GetNameByType(pType)
+
+				if name == "HashedMap" || name == "HashedSet" {
+					pType = name
+				}
+			}
+
 			val, err := contract.createDefaultValForType(pType)
 
 			if err != nil {
@@ -678,6 +687,15 @@ func (contract *Contract) constructStatePropsPlaceholders(stateEntities []StateE
 		pName := stateProp.Name
 		pType := stateProp.Type
 
+		if IsGenericType(pType) {
+
+			name := GetNameByType(pType)
+
+			if name == "HashedMap" || name == "HashedSet" {
+				pType = name
+			}
+		}
+
 		val, err := contract.createDefaultValForType(pType)
 
 		if err != nil {
@@ -708,6 +726,15 @@ func getTypeItemsFromDesc(desc map[string]interface{}) map[string]interface{} {
 	for _, libraryItem := range desc["library"].([]LibraryEntity) {
 		typeStr := libraryItem.Name
 		res[typeStr] = libraryItem
+	}
+
+	res["SortedItem"] = StructEntity{
+		Name: "SortedItem",
+		Params: []ParamEntity{
+			{Name: "item", Type: "T"},
+			{Name: "idx", Type: "int"},
+		},
+		GenericTypes: []string{"T"},
 	}
 
 	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
@@ -950,6 +977,11 @@ func createDefaultValForPrimitiveType(typeString string) (ScryptType, error) {
 		res = SigHashPreimage{[]byte{0x00}}
 	case "OpCodeType":
 		res = OpCodeType{[]byte{0x00}}
+	case "HashedMap":
+		res = NewHashedMap()
+	case "HashedSet":
+		res = NewHashedSet()
+
 	default:
 		return res, fmt.Errorf("unknown type string \"%s\"", typeString)
 	}
@@ -1024,7 +1056,21 @@ func (contract *Contract) substituteParamInTemplate(lockingScriptHex string, ele
 	case "Array":
 		arr := elem.(Array)
 		return contract.substituteArrayParamInTemplate(lockingScriptHex, arr, paramName)
+	case "HashedSet":
+		elemHex, err := elem.Hex()
+		if err != nil {
+			return "", err
+		}
 
+		toReplace := fmt.Sprintf("<%s._data>", paramName)
+		return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
+	case "HashedMap":
+		elemHex, err := elem.Hex()
+		if err != nil {
+			return "", err
+		}
+		toReplace := fmt.Sprintf("<%s._data>", paramName)
+		return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
 	default:
 
 		// If this parameter is part of the contracts state, then we only have to substitute the placeholder with an arbitrary
@@ -1084,6 +1130,23 @@ func (contract *Contract) substituteArrayParamInTemplate(lockingScriptHex string
 				return lockingScriptHex, nil
 			}
 			lockingScriptHex = res
+
+		case "HashedSet":
+			elemHex, err := elem.Hex()
+			if err != nil {
+				return "", err
+			}
+
+			toReplace := fmt.Sprintf("<%s._data>", toReplace)
+			return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
+		case "HashedMap":
+			elemHex, err := elem.Hex()
+			if err != nil {
+				return "", err
+			}
+			toReplace := fmt.Sprintf("<%s._data>", toReplace)
+			return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
+
 		default:
 
 			elemHex, err := elem.Hex()
@@ -1158,6 +1221,22 @@ func (contract *Contract) substituteLibraryParamInTemplate(lockingScriptHex stri
 				return lockingScriptHex, nil
 			}
 			lockingScriptHex = res
+
+		case "HashedSet":
+			elemHex, err := val.Hex()
+			if err != nil {
+				return "", err
+			}
+
+			toReplace := fmt.Sprintf("<%s._data>", toReplace)
+			return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
+		case "HashedMap":
+			elemHex, err := val.Hex()
+			if err != nil {
+				return "", err
+			}
+			toReplace := fmt.Sprintf("<%s._data>", toReplace)
+			return strings.Replace(lockingScriptHex, toReplace, elemHex, 1), nil
 		default:
 
 			elemHex, err := val.Hex()

@@ -51,6 +51,10 @@ func NewInt(val int64) Int {
 	return Int{big.NewInt(val)}
 }
 
+func (intType Int) Clone() Int {
+	return Int{intType.value}
+}
+
 func (intType Int) Hex() (string, error) {
 	b, err := intType.Bytes()
 	if err != nil {
@@ -106,6 +110,10 @@ type Bool struct {
 
 func NewBool(val bool) Bool {
 	return Bool{val}
+}
+
+func (boolType Bool) Clone() Bool {
+	return Bool{boolType.value}
 }
 
 func (boolType Bool) Hex() (string, error) {
@@ -171,6 +179,11 @@ func (bytesType Bytes) GetTypeString() string {
 }
 
 func (bytesType Bytes) MarshalJSON() ([]byte, error) {
+
+	if len(bytesType.value) == 0 {
+		return []byte("\"b''\""), nil
+	}
+
 	l := fmt.Sprintf("\"b'%s'\"", hex.EncodeToString(bytesType.value))
 	return []byte(l), nil
 }
@@ -359,6 +372,7 @@ func (ripemd160Type Ripemd160) GetTypeString() string {
 }
 
 func (ripemd160Type Ripemd160) MarshalJSON() ([]byte, error) {
+
 	b := ripemd160Type.value
 	l := fmt.Sprintf("\"Ripemd160(b'%s')\"", hex.EncodeToString(b))
 	return []byte(l), nil
@@ -867,7 +881,7 @@ func (hashedMapType *HashedMap) Delete(key ScryptType) error {
 	return nil
 }
 
-func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
+func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int64, error) {
 	hashKey, err := FlattenSHA256(key)
 	if err != nil {
 		return -1, err
@@ -878,7 +892,7 @@ func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
 	idx := 0
 	for _, k := range keysSorted {
 		if k == hashKey {
-			return idx, nil
+			return int64(idx), nil
 		}
 		idx++
 	}
@@ -912,7 +926,39 @@ func (hashedMapType HashedMap) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
+func (hashedMapType HashedMap) RawHex() (string, error) {
+	if len(hashedMapType.values) == 0 {
+		return "", nil
+	}
+
+	b, err := hashedMapType.RawBytes()
+
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func (hashedMapType HashedMap) RawBytes() ([]byte, error) {
+	if len(hashedMapType.values) == 0 {
+		return []byte{}, nil
+	}
+
+	b, err := hashedMapType.Bytes()
+
+	if err != nil {
+		return b, err
+	}
+
+	return DropLenPrefix(b)
+}
+
 func (hashedMapType HashedMap) Bytes() ([]byte, error) {
+
+	if len(hashedMapType.values) == 0 {
+		return []byte{0x00}, nil
+	}
 	var buff bytes.Buffer
 
 	keysSorted := hashedMapType.GetKeysSorted()
@@ -922,11 +968,35 @@ func (hashedMapType HashedMap) Bytes() ([]byte, error) {
 		buff.Write(val[:])
 	}
 
-	if buff.Len() == 0 {
-		return []byte{0x00}, nil
+	buf := buff.Bytes()
+
+	b, err := appendPushdataPrefix(buf)
+	if err != nil {
+		return b, err
 	}
 
-	return buff.Bytes(), nil
+	return b, nil
+}
+
+func (hashedMapType HashedMap) MarshalJSON() ([]byte, error) {
+
+	var buff bytes.Buffer
+
+	keysSorted := hashedMapType.GetKeysSorted()
+	for _, k := range keysSorted {
+		val := hashedMapType.values[k]
+		buff.Write(k[:])
+		buff.Write(val[:])
+	}
+
+	b := buff.Bytes()
+
+	if len(b) == 0 {
+		return []byte("[\"b''\"]"), nil
+	}
+
+	l := fmt.Sprintf("[\"b'%s'\"]", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewHashedMap() HashedMap {
@@ -963,7 +1033,7 @@ func (hashedSetType *HashedSet) Delete(key ScryptType) error {
 	return nil
 }
 
-func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int, error) {
+func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int64, error) {
 	hashKey, err := FlattenSHA256(key)
 	if err != nil {
 		return -1, err
@@ -974,7 +1044,7 @@ func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int, error) {
 	idx := 0
 	for _, k := range keysSorted {
 		if k == hashKey {
-			return idx, nil
+			return int64(idx), nil
 		}
 		idx++
 	}
@@ -1009,6 +1079,11 @@ func (hashedSetType HashedSet) Hex() (string, error) {
 }
 
 func (hashedSetType HashedSet) Bytes() ([]byte, error) {
+
+	if len(hashedSetType.values) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var buff bytes.Buffer
 
 	keysSorted := hashedSetType.GetKeysSorted()
@@ -1016,11 +1091,60 @@ func (hashedSetType HashedSet) Bytes() ([]byte, error) {
 		buff.Write(k[:])
 	}
 
-	if buff.Len() == 0 {
-		return []byte{0x00}, nil
+	buf := buff.Bytes()
+
+	b, err := appendPushdataPrefix(buf)
+	if err != nil {
+		return b, err
 	}
 
-	return buff.Bytes(), nil
+	return b, nil
+}
+
+func (hashedSetType HashedSet) RawBytes() ([]byte, error) {
+	if len(hashedSetType.values) == 0 {
+		return []byte{}, nil
+	}
+
+	b, err := hashedSetType.Bytes()
+
+	if err != nil {
+		return b, err
+	}
+
+	return DropLenPrefix(b)
+}
+
+func (hashedSetType HashedSet) RawHex() (string, error) {
+	if len(hashedSetType.values) == 0 {
+		return "", nil
+	}
+
+	b, err := hashedSetType.RawBytes()
+
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func (hashedSetType HashedSet) MarshalJSON() ([]byte, error) {
+	var buff bytes.Buffer
+
+	keysSorted := hashedSetType.GetKeysSorted()
+	for _, k := range keysSorted {
+		buff.Write(k[:])
+	}
+
+	b := buff.Bytes()
+
+	if len(b) == 0 {
+		return []byte("[\"b''\"]"), nil
+	}
+
+	l := fmt.Sprintf("[\"b'%s'\"]", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewHashedSet() HashedSet {

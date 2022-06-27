@@ -96,10 +96,6 @@ func ResolveType(typeStr string, aliases map[string]string) string {
 		return fmt.Sprintf("%s<%s>", n, strings.Join(gts, ","))
 	}
 
-	if typeStr == "PubKeyHash" {
-		return "Ripemd160"
-	}
-
 	resolvedType, ok := aliases[typeStr]
 	if ok {
 		return ResolveType(resolvedType, aliases)
@@ -275,6 +271,9 @@ func ConstructAliasMap(aliasesDesc []AliasEntity) map[string]string {
 		typeString := item.Type
 		aliases[nameString] = typeString
 	}
+
+	aliases["PubKeyHash"] = "Ripemd160"
+
 	return aliases
 }
 
@@ -407,7 +406,11 @@ func FlattenSHA256(val ScryptType) ([32]byte, error) {
 
 	var hashesBuff bytes.Buffer
 	for _, e := range flattened {
-		valBytes, err := e.Bytes()
+		valBytes, err := e.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		valBytes, err = DropLenPrefix(valBytes)
 		if err != nil {
 			return res, err
 		}
