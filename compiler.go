@@ -1,6 +1,7 @@
 package scryptlib
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -99,27 +100,46 @@ type CompilerResult struct {
 	CompilerOutAsm  map[string]interface{}   // Whole ASM tree, as outputed by the compiler
 }
 
-func (compilerResult CompilerResult) ToDesc() map[string]interface{} {
-	res := make(map[string]interface{})
-	res["version"] = CURRENT_CONTRACT_DESCRIPTION_VERSION
-	res["compilerVersion"] = compilerResult.CompilerVersion
-	res["contract"] = compilerResult.Contract
-	res["md5"] = compilerResult.SourceMD5
-	res["stateProps"] = compilerResult.StateProps
-	res["structs"] = compilerResult.Structs
-	res["library"] = compilerResult.Libraries
-	res["alias"] = compilerResult.Aliases
-	res["abi"] = compilerResult.Abi
-	res["buildType"] = compilerResult.buildType
-	res["file"] = ""
-	res["asm"] = compilerResult.RawAsm
-	res["hex"] = compilerResult.RawHex
-	res["sources"] = nil
-	res["sourceMap"] = nil
+type DescriptionFile struct {
+	Version         int             `json:"version"`
+	CompilerVersion string          `json:"compilerVersion"`
+	Contract        string          `json:"contract"`
+	Md5             string          `json:"md5"`
+	StateProps      []ParamEntity   `json:"stateProps"`
+	Structs         []StructEntity  `json:"structs"`
+	Libraries       []LibraryEntity `json:"library"`
+	Aliases         []AliasEntity   `json:"alias"`
+	Abi             []ABIEntity     `json:"abi"`
+	BuildType       BuildType       `json:"buildType"`
+	File            string          `json:"file"`
+	Asm             string          `json:"asm"`
+	Hex             string          `json:"hex"`
+	Sources         []string        `json:"sources"`
+	SourceMap       []string        `json:"sourceMap"`
+}
+
+func (compilerResult CompilerResult) ToDesc() DescriptionFile {
+
+	var res DescriptionFile
+	res.Version = CURRENT_CONTRACT_DESCRIPTION_VERSION
+	res.CompilerVersion = compilerResult.CompilerVersion
+	res.Contract = compilerResult.Contract
+	res.Md5 = compilerResult.SourceMD5
+	res.StateProps = compilerResult.StateProps
+	res.Structs = compilerResult.Structs
+	res.Libraries = compilerResult.Libraries
+	res.Aliases = compilerResult.Aliases
+	res.Abi = compilerResult.Abi
+	res.BuildType = compilerResult.buildType
+	res.File = ""
+	res.Asm = compilerResult.RawAsm
+	res.Hex = compilerResult.RawHex
+	res.Sources = make([]string, 0)
+	res.SourceMap = make([]string, 0)
 	return res
 }
 
-func (compilerResult CompilerResult) ToDescWSourceMap() (map[string]interface{}, error) {
+func (compilerResult CompilerResult) ToDescWSourceMap() (DescriptionFile, error) {
 	res := compilerResult.ToDesc()
 
 	output := compilerResult.CompilerOutAsm["output"].([]interface{})
@@ -129,7 +149,7 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (map[string]interface{},
 
 	firstElem := output[0].(map[string]interface{})
 	if _, ok := firstElem["src"]; !ok {
-		return nil, errors.New("Missing source map data in compiler results. Run compiler with debug flag.")
+		return res, errors.New("Missing source map data in compiler results. Run compiler with debug flag.")
 	}
 
 	var sources []string
@@ -138,18 +158,18 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (map[string]interface{},
 	}
 	sourcesFullpath, err := getSourcesFullpath(sources)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 
-	res["file"] = compilerResult.SourceFile
-	res["sources"] = sourcesFullpath
+	res.File = compilerResult.SourceFile
+	res.Sources = sourcesFullpath
 
 	var sourceMap []string
 	for _, item := range compilerResult.CompilerOutAsm["output"].([]interface{}) {
 		item := item.(map[string]interface{})
 		sourceMap = append(sourceMap, item["src"].(string))
 	}
-	res["sourceMap"] = sourceMap
+	res.SourceMap = sourceMap
 
 	return res, nil
 }
@@ -305,7 +325,7 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 		outFileDesc := fmt.Sprintf("%s_desc.json", sourceFilePrefix)
 		outFileDesc = filepath.Join(compilerWrapper.OutDir, outFileDesc)
 
-		var desc map[string]interface{}
+		var desc DescriptionFile
 		if compilerWrapper.Debug {
 			desc, err = res.ToDescWSourceMap()
 			if err != nil {
@@ -326,8 +346,18 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 			}
 		}()
 
-		descJSON, _ := json.MarshalIndent(desc, "", "  ")
-		_, err = f.WriteString(string(descJSON))
+		buf := new(bytes.Buffer)
+		encoder := json.NewEncoder(buf)
+
+		encoder.SetEscapeHTML(false)
+		encoder.SetIndent("", "  ")
+
+		err = encoder.Encode(desc)
+		if err != nil {
+			return res, err
+		}
+		descJSON := buf.String()
+		_, err = f.WriteString(descJSON)
 		if err != nil {
 			return res, err
 		}

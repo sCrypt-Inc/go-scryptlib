@@ -716,14 +716,14 @@ func (contract *Contract) constructStatePropsPlaceholders(stateEntities []StateE
 	return nil
 }
 
-func getTypeItemsFromDesc(desc map[string]interface{}) map[string]interface{} {
+func getTypeItemsFromDesc(desc DescriptionFile) map[string]interface{} {
 	res := make(map[string]interface{})
-	for _, structItem := range desc["structs"].([]StructEntity) {
+	for _, structItem := range desc.Structs {
 		structType := structItem.Name
 		res[structType] = structItem
 	}
 
-	for _, libraryItem := range desc["library"].([]LibraryEntity) {
+	for _, libraryItem := range desc.Libraries {
 		typeStr := libraryItem.Name
 		res[typeStr] = libraryItem
 	}
@@ -737,7 +737,7 @@ func getTypeItemsFromDesc(desc map[string]interface{}) map[string]interface{} {
 		GenericTypes: []string{"T"},
 	}
 
-	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
+	aliases := ConstructAliasMap(desc.Aliases)
 
 	for key, val := range aliases {
 		if _, contains := res[val]; contains {
@@ -747,9 +747,9 @@ func getTypeItemsFromDesc(desc map[string]interface{}) map[string]interface{} {
 	return res
 }
 
-func getTypeResolverFromDesc(desc map[string]interface{}) func(string) string {
+func getTypeResolverFromDesc(desc DescriptionFile) func(string) string {
 
-	aliases := ConstructAliasMap(desc["alias"].([]AliasEntity))
+	aliases := ConstructAliasMap(desc.Aliases)
 
 	return func(t string) string {
 		return ResolveType(t, aliases)
@@ -989,20 +989,20 @@ func createDefaultValForPrimitiveType(typeString string) (ScryptType, error) {
 }
 
 // Creates a new instance of Contract type from the contracts description tree.
-func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
+func NewContractFromDesc(desc DescriptionFile) (Contract, error) {
 	var res Contract
 
-	lockingScriptHexTemplate := desc["hex"].(string)
+	lockingScriptHexTemplate := desc.Hex
 
 	typeItems := getTypeItemsFromDesc(desc)
 
 	typeResolver := getTypeResolverFromDesc(desc)
 
-	abis := desc["abi"].([]ABIEntity)
+	abis := desc.Abi
 
 	c := Contract{
-		file:                     desc["file"].(string),
-		name:                     desc["contract"].(string),
+		file:                     desc.File,
+		name:                     desc.Contract,
 		lockingScriptHexTemplate: lockingScriptHexTemplate,
 		abis:                     abis,
 		constructorParams:        make([]functionParam, 0),
@@ -1020,7 +1020,7 @@ func NewContractFromDesc(desc map[string]interface{}) (Contract, error) {
 		return res, err
 	}
 
-	err = c.constructStatePropsPlaceholders(desc["stateProps"].([]StateEntity))
+	err = c.constructStatePropsPlaceholders(desc.StateProps)
 
 	if err != nil {
 		return res, err
