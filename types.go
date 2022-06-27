@@ -13,8 +13,8 @@ import (
 
 	"github.com/libsv/go-bk/base58"
 	"github.com/libsv/go-bk/bec"
-	"github.com/libsv/go-bt/v2/bscript"
-	"github.com/libsv/go-bt/v2/sighash"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript"
+	"github.com/sCrypt-Inc/go-bt/v2/sighash"
 	"github.com/thoas/go-funk"
 )
 
