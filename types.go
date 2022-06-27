@@ -51,6 +51,10 @@ func NewInt(val int64) Int {
 	return Int{big.NewInt(val)}
 }
 
+func (intType Int) Clone() Int {
+	return Int{intType.value}
+}
+
 func (intType Int) Hex() (string, error) {
 	b, err := intType.Bytes()
 	if err != nil {
@@ -108,6 +112,10 @@ func NewBool(val bool) Bool {
 	return Bool{val}
 }
 
+func (boolType Bool) Clone() Bool {
+	return Bool{boolType.value}
+}
+
 func (boolType Bool) Hex() (string, error) {
 	b, err := boolType.Bytes()
 	if err != nil {
@@ -153,6 +161,11 @@ func (bytesType Bytes) Hex() (string, error) {
 }
 
 func (bytesType Bytes) Bytes() ([]byte, error) {
+
+	if bytesType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	pushDataPrefix, err := bscript.PushDataPrefix(bytesType.value)
 	if err != nil {
@@ -166,6 +179,11 @@ func (bytesType Bytes) GetTypeString() string {
 }
 
 func (bytesType Bytes) MarshalJSON() ([]byte, error) {
+
+	if len(bytesType.value) == 0 {
+		return []byte("\"b''\""), nil
+	}
+
 	l := fmt.Sprintf("\"b'%s'\"", hex.EncodeToString(bytesType.value))
 	return []byte(l), nil
 }
@@ -187,8 +205,18 @@ func (privKeyType PrivKey) Hex() (string, error) {
 }
 
 func (privKeyType PrivKey) Bytes() ([]byte, error) {
+
+	if privKeyType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := privKeyType.value.Serialise()
+
+	for i := 0; i < len(b)/2; i++ {
+		b[i], b[len(b)-i-1] = b[len(b)-i-1], b[i]
+	}
+
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
 		return res, err
@@ -202,6 +230,11 @@ func (privKeyType PrivKey) GetTypeString() string {
 }
 
 func (privKeyType PrivKey) MarshalJSON() ([]byte, error) {
+
+	if privKeyType.value == nil {
+		return []byte("\"PrivKey(0)\""), nil
+	}
+
 	b := privKeyType.value.Serialise()
 	n := new(big.Int)
 	n.SetBytes(b)
@@ -227,10 +260,12 @@ func (pubKeyType PubKey) Hex() (string, error) {
 }
 
 func (pubKeyType PubKey) Bytes() ([]byte, error) {
-	res := make([]byte, 0)
+
 	if pubKeyType.value == nil {
-		return res, nil
+		return []byte{0x00}, nil
 	}
+
+	res := make([]byte, 0)
 	b := pubKeyType.value.SerialiseCompressed()
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
 	if err != nil {
@@ -267,6 +302,11 @@ func (sigType Sig) Hex() (string, error) {
 }
 
 func (sigType Sig) Bytes() ([]byte, error) {
+
+	if sigType.value == nil {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sigType.value.Serialise()
 	b = append(b, byte(sigType.shf))
@@ -312,6 +352,11 @@ func (ripemd160Type Ripemd160) Hex() (string, error) {
 }
 
 func (ripemd160Type Ripemd160) Bytes() ([]byte, error) {
+
+	if len(ripemd160Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := ripemd160Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -327,6 +372,7 @@ func (ripemd160Type Ripemd160) GetTypeString() string {
 }
 
 func (ripemd160Type Ripemd160) MarshalJSON() ([]byte, error) {
+
 	b := ripemd160Type.value
 	l := fmt.Sprintf("\"Ripemd160(b'%s')\"", hex.EncodeToString(b))
 	return []byte(l), nil
@@ -371,6 +417,11 @@ func (sha1Type Sha1) Hex() (string, error) {
 }
 
 func (sha1Type Sha1) Bytes() ([]byte, error) {
+
+	if len(sha1Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sha1Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -409,6 +460,11 @@ func (sha256Type Sha256) Hex() (string, error) {
 }
 
 func (sha256Type Sha256) Bytes() ([]byte, error) {
+
+	if len(sha256Type.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sha256Type.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -438,11 +494,27 @@ func NewSighHashType(val []byte) SigHashType {
 }
 
 func (sigHashType SigHashType) Hex() (string, error) {
-	return EvenHexStr(fmt.Sprintf("%x", sigHashType.value)), nil
+	b, err := sigHashType.Bytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (sigHashType SigHashType) Bytes() ([]byte, error) {
-	return sigHashType.value, nil
+
+	if len(sigHashType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
+	var res []byte
+	b := sigHashType.value
+	pushDataPrefix, err := bscript.PushDataPrefix(b)
+	if err != nil {
+		return res, err
+	}
+
+	return append(pushDataPrefix, b...), nil
 }
 
 func (sigHashType SigHashType) GetTypeString() string {
@@ -472,6 +544,11 @@ func (sigHashPreimageType SigHashPreimage) Hex() (string, error) {
 }
 
 func (sigHashPreimageType SigHashPreimage) Bytes() ([]byte, error) {
+
+	if len(sigHashPreimageType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var res []byte
 	b := sigHashPreimageType.value
 	pushDataPrefix, err := bscript.PushDataPrefix(b)
@@ -501,11 +578,27 @@ func NewOpCodeType(val []byte) OpCodeType {
 }
 
 func (opCodeType OpCodeType) Hex() (string, error) {
-	return EvenHexStr(fmt.Sprintf("%x", opCodeType.value)), nil
+	b, err := opCodeType.Bytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (opCodeType OpCodeType) Bytes() ([]byte, error) {
-	return opCodeType.value, nil
+
+	if len(opCodeType.value) == 0 {
+		return []byte{0x00}, nil
+	}
+
+	var res []byte
+	b := opCodeType.value
+	pushDataPrefix, err := bscript.PushDataPrefix(b)
+	if err != nil {
+		return res, err
+	}
+
+	return append(pushDataPrefix, b...), nil
 }
 
 func (opCodeType OpCodeType) GetTypeString() string {
@@ -571,10 +664,16 @@ func (arr Array) MarshalJSON() ([]byte, error) {
 	return json.Marshal(arr.values)
 }
 
+type GenericType struct {
+	Generic string
+	Actual  string
+}
+
 type Struct struct {
-	typeName    string
-	keysInOrder []string
-	values      map[string]ScryptType
+	typeName     string
+	keysInOrder  []string
+	values       map[string]ScryptType
+	genericTypes []GenericType
 }
 
 func (structType Struct) Hex() (string, error) {
@@ -604,21 +703,35 @@ func (structType Struct) Bytes() ([]byte, error) {
 	return buff.Bytes(), nil
 }
 
-func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) {
-	// TODO: Is there a more efficient way to do value updates?
+func (structType *Struct) UpdateValue(fieldName string, newVal ScryptType) error {
 	newVals := make(map[string]ScryptType)
 	for key, val := range structType.values {
 		if key == fieldName {
+			if newVal.GetTypeString() != val.GetTypeString() {
+				return fmt.Errorf("type of field %s should be %s, but got %s", fieldName, val.GetTypeString(), newVal.GetTypeString())
+			}
 			newVals[key] = newVal
 		} else {
 			newVals[key] = val
 		}
 	}
 	structType.values = newVals
+
+	return nil
 }
 
 func (structType Struct) GetTypeString() string {
-	return structType.typeName
+
+	if len(structType.genericTypes) == 0 {
+		return structType.typeName
+	}
+
+	ts := make([]string, 0)
+	for _, val := range structType.genericTypes {
+		ts = append(ts, val.Actual)
+	}
+
+	return fmt.Sprintf("%s<%s>", structType.typeName, strings.Join(ts, ","))
 }
 
 func (structType Struct) MarshalJSON() ([]byte, error) {
@@ -638,6 +751,7 @@ type Library struct {
 	params              map[string]ScryptType
 	propertyKeysInOrder []string
 	properties          map[string]ScryptType
+	genericTypes        []GenericType
 }
 
 func (libraryType Library) ctor() bool {
@@ -707,7 +821,17 @@ func (libraryType *Library) UpdatePropertyValue(propertyName string, newVal Scry
 }
 
 func (libraryType Library) GetTypeString() string {
-	return libraryType.typeName
+
+	if len(libraryType.genericTypes) == 0 {
+		return libraryType.typeName
+	}
+
+	ts := make([]string, 0)
+	for _, val := range libraryType.genericTypes {
+		ts = append(ts, val.Actual)
+	}
+
+	return fmt.Sprintf("%s<%s>", libraryType.typeName, strings.Join(ts, ","))
 }
 
 func (libraryType Library) MarshalJSON() ([]byte, error) {
@@ -757,7 +881,7 @@ func (hashedMapType *HashedMap) Delete(key ScryptType) error {
 	return nil
 }
 
-func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
+func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int64, error) {
 	hashKey, err := FlattenSHA256(key)
 	if err != nil {
 		return -1, err
@@ -768,7 +892,7 @@ func (hashedMapType HashedMap) KeyIndex(key ScryptType) (int, error) {
 	idx := 0
 	for _, k := range keysSorted {
 		if k == hashKey {
-			return idx, nil
+			return int64(idx), nil
 		}
 		idx++
 	}
@@ -802,7 +926,39 @@ func (hashedMapType HashedMap) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
+func (hashedMapType HashedMap) RawHex() (string, error) {
+	if len(hashedMapType.values) == 0 {
+		return "", nil
+	}
+
+	b, err := hashedMapType.RawBytes()
+
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func (hashedMapType HashedMap) RawBytes() ([]byte, error) {
+	if len(hashedMapType.values) == 0 {
+		return []byte{}, nil
+	}
+
+	b, err := hashedMapType.Bytes()
+
+	if err != nil {
+		return b, err
+	}
+
+	return DropLenPrefix(b)
+}
+
 func (hashedMapType HashedMap) Bytes() ([]byte, error) {
+
+	if len(hashedMapType.values) == 0 {
+		return []byte{0x00}, nil
+	}
 	var buff bytes.Buffer
 
 	keysSorted := hashedMapType.GetKeysSorted()
@@ -812,7 +968,35 @@ func (hashedMapType HashedMap) Bytes() ([]byte, error) {
 		buff.Write(val[:])
 	}
 
-	return buff.Bytes(), nil
+	buf := buff.Bytes()
+
+	b, err := appendPushdataPrefix(buf)
+	if err != nil {
+		return b, err
+	}
+
+	return b, nil
+}
+
+func (hashedMapType HashedMap) MarshalJSON() ([]byte, error) {
+
+	var buff bytes.Buffer
+
+	keysSorted := hashedMapType.GetKeysSorted()
+	for _, k := range keysSorted {
+		val := hashedMapType.values[k]
+		buff.Write(k[:])
+		buff.Write(val[:])
+	}
+
+	b := buff.Bytes()
+
+	if len(b) == 0 {
+		return []byte("[\"b''\"]"), nil
+	}
+
+	l := fmt.Sprintf("[\"b'%s'\"]", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewHashedMap() HashedMap {
@@ -849,7 +1033,7 @@ func (hashedSetType *HashedSet) Delete(key ScryptType) error {
 	return nil
 }
 
-func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int, error) {
+func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int64, error) {
 	hashKey, err := FlattenSHA256(key)
 	if err != nil {
 		return -1, err
@@ -860,7 +1044,7 @@ func (hashedSetType HashedSet) KeyIndex(key ScryptType) (int, error) {
 	idx := 0
 	for _, k := range keysSorted {
 		if k == hashKey {
-			return idx, nil
+			return int64(idx), nil
 		}
 		idx++
 	}
@@ -895,6 +1079,11 @@ func (hashedSetType HashedSet) Hex() (string, error) {
 }
 
 func (hashedSetType HashedSet) Bytes() ([]byte, error) {
+
+	if len(hashedSetType.values) == 0 {
+		return []byte{0x00}, nil
+	}
+
 	var buff bytes.Buffer
 
 	keysSorted := hashedSetType.GetKeysSorted()
@@ -902,7 +1091,60 @@ func (hashedSetType HashedSet) Bytes() ([]byte, error) {
 		buff.Write(k[:])
 	}
 
-	return buff.Bytes(), nil
+	buf := buff.Bytes()
+
+	b, err := appendPushdataPrefix(buf)
+	if err != nil {
+		return b, err
+	}
+
+	return b, nil
+}
+
+func (hashedSetType HashedSet) RawBytes() ([]byte, error) {
+	if len(hashedSetType.values) == 0 {
+		return []byte{}, nil
+	}
+
+	b, err := hashedSetType.Bytes()
+
+	if err != nil {
+		return b, err
+	}
+
+	return DropLenPrefix(b)
+}
+
+func (hashedSetType HashedSet) RawHex() (string, error) {
+	if len(hashedSetType.values) == 0 {
+		return "", nil
+	}
+
+	b, err := hashedSetType.RawBytes()
+
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func (hashedSetType HashedSet) MarshalJSON() ([]byte, error) {
+	var buff bytes.Buffer
+
+	keysSorted := hashedSetType.GetKeysSorted()
+	for _, k := range keysSorted {
+		buff.Write(k[:])
+	}
+
+	b := buff.Bytes()
+
+	if len(b) == 0 {
+		return []byte("[\"b''\"]"), nil
+	}
+
+	l := fmt.Sprintf("[\"b'%s'\"]", hex.EncodeToString(b))
+	return []byte(l), nil
 }
 
 func NewHashedSet() HashedSet {

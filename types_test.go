@@ -47,18 +47,18 @@ func TestTypesHashedMap(t *testing.T) {
 
 	keyIdx, err := hm.KeyIndex(Int{big.NewInt(1234)})
 	assert.NoError(t, err)
-	assert.Equal(t, 2, keyIdx)
+	assert.Equal(t, int64(2), keyIdx)
 
 	keyIdx, err = hm.KeyIndex(Int{big.NewInt(22)})
 	assert.NoError(t, err)
-	assert.Equal(t, 1, keyIdx)
+	assert.Equal(t, int64(1), keyIdx)
 
 	keyIdx, err = hm.KeyIndex(Int{big.NewInt(3)})
 	assert.NoError(t, err)
-	assert.Equal(t, 0, keyIdx)
+	assert.Equal(t, int64(0), keyIdx)
 
 	hex, _ := hm.Hex()
-	assert.Equal(t, "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5fd9528b920d6d3956e9e16114523e1889c751e8c1e040182116d4c906b43f5587cb7c4547cf2653590d7a9ace60cc623d25148adfbc88a89aeb0ef88da7839bad4f09e5c5af99a24c7e304ca7997d26cb00901697de08a49be0d46ab5839b614806505393e046db3163e748c7c7ee1763d242f1f7815a0aaa32c211916df6f0438999152af10c421ddd26ea0baa3ad39ac02d45108d0bd2a6689321273293632", hex)
+	assert.Equal(t, "4cc0084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5fd9528b920d6d3956e9e16114523e1889c751e8c1e040182116d4c906b43f5587cb7c4547cf2653590d7a9ace60cc623d25148adfbc88a89aeb0ef88da7839bad4f09e5c5af99a24c7e304ca7997d26cb00901697de08a49be0d46ab5839b614806505393e046db3163e748c7c7ee1763d242f1f7815a0aaa32c211916df6f0438999152af10c421ddd26ea0baa3ad39ac02d45108d0bd2a6689321273293632", hex)
 
 	// TODO: Test with struct types.
 }

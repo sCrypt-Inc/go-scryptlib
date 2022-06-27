@@ -36,7 +36,7 @@ func TestStateHexInt(t *testing.T) {
 func TestStateHexBool(t *testing.T) {
 	hex, err := Bool{true}.StateHex()
 	assert.NoError(t, err)
-	assert.Equal(t, "51", hex)
+	assert.Equal(t, "01", hex)
 
 	hex, err = Bool{false}.StateHex()
 	assert.NoError(t, err)

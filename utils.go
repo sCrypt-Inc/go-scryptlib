@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/libsv/go-bt/v2/bscript"
+	"github.com/thoas/go-funk"
 )
 
 // Factor array declaration string to array type and sizes.
@@ -20,13 +21,20 @@ import (
 func FactorizeArrayTypeString(typeStr string) (string, []string) {
 	var arraySizes []string
 
+	typeName := strings.Split(typeStr, "[")[0]
+
+	sizeParts := typeStr[strings.Index(typeStr, "["):]
+
+	if strings.Contains(typeStr, ">") {
+		typeName = typeStr[0 : strings.LastIndex(typeStr, ">")+1]
+		sizeParts = typeStr[strings.LastIndex(typeStr, ">")+1:]
+	}
+
 	r := regexp.MustCompile(`\[([\w.]+)\]+`)
-	matches := r.FindAllStringSubmatch(typeStr, -1)
+	matches := r.FindAllStringSubmatch(sizeParts, -1)
 	for _, match := range matches {
 		arraySizes = append(arraySizes, match[1])
 	}
-
-	typeName := strings.Split(typeStr, "[")[0]
 
 	return typeName, arraySizes
 }
@@ -63,13 +71,6 @@ func IsArrayType(typeStr string) bool {
 	return match
 }
 
-// Check if string is of a struct type.
-// e.g. "struct Point {}"
-//func IsStructType(typeStr string) bool {
-//	match, _ := regexp.MatchString(`^struct\s(\w+)\s\{\}$`, typeStr)
-//	return match
-//}
-
 // Check if string is a basic sCrypt type.
 // e.g. "int", "bool", "bytes" ...
 func IsBasicScryptType(typeStr string) bool {
@@ -77,25 +78,22 @@ func IsBasicScryptType(typeStr string) bool {
 	return res
 }
 
-// Returns struct name from type string.
-// e.g.: 'struct ST1 {}[2][2][2]' -> 'ST1'.
-//func GetStructNameByType(typeName string) string {
-//	r := regexp.MustCompile(`^struct\s(\w+)\s\{\}.*$`)
-//	match := r.FindStringSubmatch(typeName)
-//	if match != nil {
-//		return match[1]
-//	}
-//	return ""
-//}
-
 func ResolveType(typeStr string, aliases map[string]string) string {
 	if IsArrayType(typeStr) {
 		typeName, arraySizes := FactorizeArrayTypeString(typeStr)
 		return ToLiteralArrayTypeStr(ResolveType(typeName, aliases), arraySizes)
 	}
 
-	if typeStr == "PubKeyHash" {
-		return "Ripemd160"
+	if IsGenericType(typeStr) {
+		name, actualTypes := ParseGenericType(typeStr)
+
+		n := ResolveType(name, aliases)
+
+		gts := funk.Map(actualTypes, func(actualType string) string {
+			return ResolveType(actualType, aliases)
+		}).([]string)
+
+		return fmt.Sprintf("%s<%s>", n, strings.Join(gts, ","))
 	}
 
 	resolvedType, ok := aliases[typeStr]
@@ -273,6 +271,9 @@ func ConstructAliasMap(aliasesDesc []AliasEntity) map[string]string {
 		typeString := item.Type
 		aliases[nameString] = typeString
 	}
+
+	aliases["PubKeyHash"] = "Ripemd160"
+
 	return aliases
 }
 
@@ -405,7 +406,11 @@ func FlattenSHA256(val ScryptType) ([32]byte, error) {
 
 	var hashesBuff bytes.Buffer
 	for _, e := range flattened {
-		valBytes, err := e.Bytes()
+		valBytes, err := e.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		valBytes, err = DropLenPrefix(valBytes)
 		if err != nil {
 			return res, err
 		}
@@ -553,4 +558,156 @@ func serializeState(state string, stateBytes int) (string, error) {
 
 func isStringEmpty(s string) bool {
 	return len(strings.TrimSpace(s)) == 0
+}
+
+func buildContractState(props *[]StateProp, firstCall bool) (string, error) {
+	var res string
+
+	contractStateVersion := 0
+
+	var sb strings.Builder
+
+	if firstCall {
+		sb.WriteString("01")
+	} else {
+		sb.WriteString("00")
+	}
+
+	for _, stateProp := range *props {
+
+		stateHex, err := stateProp.Value.StateHex()
+
+		if err != nil {
+			return res, err
+		}
+
+		sb.WriteString(stateHex)
+	}
+
+	sbLen := uint32(sb.Len() / 2)
+	if sbLen > 0 {
+		b1, _ := num2bin(Int{big.NewInt(int64(sbLen))}, 4)
+		b2, _ := num2bin(Int{big.NewInt(int64(contractStateVersion))}, 1)
+		sb.WriteString(b1)
+		sb.WriteString(b2)
+	}
+
+	return sb.String(), nil
+}
+
+func IsGenericType(t string) bool {
+	match, _ := regexp.MatchString(`^([\w]+)<([\w,[\]\s<>]+)>$`, t)
+	return match
+}
+
+func GetNameByType(t string) string {
+
+	if IsArrayType(t) {
+		typeName, _ := FactorizeArrayTypeString(t)
+		return GetNameByType(typeName)
+	}
+
+	if IsGenericType(t) {
+		tn, _ := ParseGenericType(t)
+		return GetNameByType(tn)
+	}
+
+	return t
+}
+
+/**
+ *
+ * @param type eg. HashedMap<int,int>
+ * @param eg. ["HashedMap", ["int", "int"]}] An array generic types returned by @getGenericDeclaration
+ * @returns {"K": "int", "V": "int"}
+ */
+func ParseGenericType(t string) (string, []string) {
+
+	if IsGenericType(t) {
+		r := regexp.MustCompile(`([\w]+)<([\w,[\]<>\s]+)>$`)
+		matches := r.FindAllStringSubmatch(t, -1)
+
+		if len(matches) == 1 {
+			ln := matches[0][1]
+			realTypes := make([]string, 0)
+
+			tail := matches[0][2]
+
+			brackets := make([]string, 0)
+			tmpType := ""
+
+			for i := 0; i < len(tail); i++ {
+				ch := fmt.Sprintf("%c", tail[i])
+
+				if ch == "<" || ch == "[" {
+					//push
+					brackets = append(brackets, ch)
+				} else if ch == ">" || ch == "]" {
+					//pop
+					brackets = brackets[0 : len(brackets)-1]
+				} else if ch == "," {
+
+					if len(brackets) == 0 {
+						realTypes = append(realTypes, strings.TrimSpace(tmpType))
+						tmpType = ""
+						continue
+					}
+				}
+				tmpType += ch
+			}
+
+			realTypes = append(realTypes, strings.TrimSpace(tmpType))
+			return ln, realTypes
+		}
+	}
+
+	panic(fmt.Errorf("%s is not generic type", t))
+}
+
+func DeduceGenericType(t string, genericTypes []string) (map[string]string, error) {
+
+	if IsGenericType(t) {
+		_, actualTypes := ParseGenericType(t)
+
+		if len(actualTypes) != len(genericTypes) {
+			return nil, fmt.Errorf("deduce generic type %s fail", t)
+		}
+
+		i := 0
+		r := funk.Reduce(genericTypes, func(acc map[string]string, genericType string) map[string]string {
+			acc[genericType] = actualTypes[i]
+			i++
+			return acc
+		}, make(map[string]string))
+		return r.(map[string]string), nil
+	}
+
+	return make(map[string]string), nil
+
+}
+
+func DeduceActualType(t string, genericTypes map[string]string) string {
+
+	if IsGenericType(t) {
+		name, gts := ParseGenericType(t)
+
+		gts_ := funk.Map(gts, func(t string) string {
+
+			at := DeduceActualType(t, genericTypes)
+
+			return at
+		}).([]string)
+
+		return fmt.Sprintf("%s<%s>", name, strings.Join(gts_, ","))
+	} else if IsArrayType(t) {
+		name, arraySizes := FactorizeArrayTypeString(t)
+		name_ := DeduceActualType(name, genericTypes)
+		return ToLiteralArrayTypeStr(name_, arraySizes)
+	}
+
+	if funk.Contains(genericTypes, t) {
+		return genericTypes[t]
+	}
+
+	return t
 }

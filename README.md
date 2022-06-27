@@ -112,3 +112,26 @@ fmt.Println(url)
 
 Run `go test -v` in the root of this project.
 
+
+## Patch
+
+Some tests with `@state` decorator fail, you need to patch [libsv/go-bt](https://github.com/libsv/go-bt) manually.
+
+
+1. Copy [0001-fix-parser-sCrypt-state-fail](./patch/0001-fix-parser-sCrypt-state-fail.patch) to `$GOPATH/pkg/mod/github.com/libsv/go-bt/v2@v2.1.0-beta.4`
+
+```
+cp patch/0001-fix-parser-sCrypt-state-fail.patch $GOPATH/pkg/mod/github.com/libsv/go-bt/v2@v2.1.0-beta.4
+```
+
+2. Modify directory permissions
+
+```
+cd $GOPATH/pkg/mod/github.com/libsv/go-bt/v2@v2.1.0-beta.4 && chmod -R a+w .
+```
+
+3. Applying Patch
+
+```
+git apply 0001-fix-parser-sCrypt-state-fail.patch
+```

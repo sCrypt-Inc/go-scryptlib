@@ -1,0 +1,21 @@
+struct ST0<T> {
+    T x;
+    T y;
+}
+
+
+contract C {
+    @state
+    ST0<int> st;
+
+    public function unlock(SigHashPreimage txPreimage) {
+        require(Tx.checkPreimage(txPreimage));
+        
+        this.st.x++;
+        this.st.y++;
+
+        bytes outputScript = this.getStateScript();
+        bytes output = Utils.buildOutput(outputScript, SigHash.value(txPreimage));
+        require(hash256(output) == SigHash.hashOutputs(txPreimage));
+    }
+}

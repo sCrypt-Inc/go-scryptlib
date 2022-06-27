@@ -109,4 +109,56 @@ func Test_flattenSha256(t *testing.T) {
 
 	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 
+	s, _ = FlattenSHA256(Int{big.NewInt(1)})
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
+
+	s, _ = FlattenSHA256(NewHashedMap())
+
+	assert.Equal(t, hex.EncodeToString(s[:]), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+	m := NewHashedMap()
+	m.Set(Int{big.NewInt(1)}, Int{big.NewInt(11)})
+
+	h, _ := m.Hex()
+
+	assert.Equal(t, h, "404bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459ae7cf46a078fed4fafd0b5e3aff144802b853f8ae459a4f0c14add3314b7cc3a6")
+
+}
+
+func Test_ParseGenericType(t *testing.T) {
+	name, ts := ParseGenericType("L<int>")
+	assert.Equal(t, name, "L")
+	assert.Equal(t, ts, []string{"int"})
+
+	name, ts = ParseGenericType("HashedMap<int, int>")
+	assert.Equal(t, name, "HashedMap")
+	assert.Equal(t, ts, []string{"int", "int"})
+
+	name, ts = ParseGenericType("HashedMap<int, bytes>")
+	assert.Equal(t, name, "HashedMap")
+	assert.Equal(t, ts, []string{"int", "bytes"})
+
+	name, ts = ParseGenericType("Mylib<int, bool >")
+	assert.Equal(t, name, "Mylib")
+	assert.Equal(t, ts, []string{"int", "bool"})
+
+	name, ts = ParseGenericType("LL<int, ST1>")
+	assert.Equal(t, name, "LL")
+	assert.Equal(t, ts, []string{"int", "ST1"})
+
+	name, ts = ParseGenericType("ST0<ST0<int,int>,int>")
+	assert.Equal(t, name, "ST0")
+	assert.Equal(t, ts, []string{"ST0<int,int>", "int"})
+}
+
+func Test_FactorizeArrayTypeString(t *testing.T) {
+	typeName, arraySizes := FactorizeArrayTypeString("L<int>[2][2]")
+	assert.Equal(t, typeName, "L<int>")
+	assert.Equal(t, arraySizes, []string{"2", "2"})
+
+	typeName, arraySizes = FactorizeArrayTypeString("ST1<ST0<ST2[3]>>[2]")
+	assert.Equal(t, typeName, "ST1<ST0<ST2[3]>>")
+	assert.Equal(t, arraySizes, []string{"2"})
+
 }

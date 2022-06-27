@@ -47,8 +47,9 @@ type ParamEntity struct {
 type StateEntity = ParamEntity
 
 type StructEntity struct {
-	Name   string        `json:"name"`
-	Params []ParamEntity `json:"params"`
+	Name         string        `json:"name"`
+	Params       []ParamEntity `json:"params"`
+	GenericTypes []string      `json:"genericTypes"`
 }
 
 type AliasEntity struct {
@@ -57,9 +58,10 @@ type AliasEntity struct {
 }
 
 type LibraryEntity struct {
-	Name       string        `json:"name"`
-	Params     []ParamEntity `json:"params"`
-	Properties []ParamEntity `json:"properties"`
+	Name         string        `json:"name"`
+	Params       []ParamEntity `json:"params"`
+	Properties   []ParamEntity `json:"properties"`
+	GenericTypes []string      `json:"genericTypes"`
 }
 
 type ABIEntityType string
@@ -665,12 +667,20 @@ func (compilerWrapper *CompilerWrapper) getAstStructDeclarations(astTree *map[st
 				})
 			}
 
-			var entity StructEntity
+			genericTypes := make([]string, 0)
 
-			entity.Name = name
-			entity.Params = params
+			if structElem["genericTypes"] != nil {
+				for _, genericType := range structElem["genericTypes"].([]interface{}) {
+					t := genericType.(string)
+					genericTypes = append(genericTypes, t)
+				}
+			}
 
-			res = append(res, entity)
+			res = append(res, StructEntity{
+				Name:         name,
+				Params:       params,
+				GenericTypes: genericTypes,
+			})
 		}
 	}
 
@@ -719,10 +729,23 @@ func (compilerWrapper *CompilerWrapper) getAstLibraryDeclarations(astTree *map[s
 				properties = append(properties, ParamEntity{Name: pName, Type: pType})
 			}
 
+			genericTypes := make([]string, 0)
+
+			if contractElem["genericTypes"] != nil {
+
+				if contractElem["genericTypes"] != nil {
+					for _, genericType := range contractElem["genericTypes"].([]interface{}) {
+						t := genericType.(string)
+						genericTypes = append(genericTypes, t)
+					}
+				}
+			}
+
 			res = append(res, LibraryEntity{
-				Name:       name,
-				Params:     params,
-				Properties: properties,
+				Name:         name,
+				Params:       params,
+				Properties:   properties,
+				GenericTypes: genericTypes,
 			})
 		}
 	}

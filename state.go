@@ -6,21 +6,6 @@ import (
 	"math/big"
 )
 
-func SerialiseContractState(vals []ScryptType) ([]byte, error) {
-	var res []byte
-	var buff bytes.Buffer
-
-	for _, val := range vals {
-		stateBytes, err := val.StateBytes()
-		if err != nil {
-			return res, err
-		}
-		buff.Write(stateBytes)
-	}
-
-	return buff.Bytes(), nil
-}
-
 func (intType Int) StateHex() (string, error) {
 	b, err := intType.StateBytes()
 	if err != nil {
@@ -56,11 +41,18 @@ func (intType Int) StateBytes() ([]byte, error) {
 }
 
 func (boolType Bool) StateHex() (string, error) {
-	return boolType.Hex()
+	b, err := boolType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (boolType Bool) StateBytes() ([]byte, error) {
-	return boolType.Bytes()
+	if boolType.value {
+		return []byte{0x01}, nil
+	}
+	return []byte{0x00}, nil
 }
 
 func (byteType Bytes) StateHex() (string, error) {
@@ -72,26 +64,53 @@ func (byteType Bytes) StateBytes() ([]byte, error) {
 }
 
 func (privKeyType PrivKey) StateHex() (string, error) {
-	return privKeyType.Hex()
+	b, err := privKeyType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (privKeyType PrivKey) StateBytes() ([]byte, error) {
+
+	if privKeyType.value == nil {
+		return []byte{0x01, 0x00}, nil
+	}
+
 	return privKeyType.Bytes()
 }
 
 func (pubKeyType PubKey) StateHex() (string, error) {
-	return pubKeyType.Hex()
+	b, err := pubKeyType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (pubKeyType PubKey) StateBytes() ([]byte, error) {
+
+	if pubKeyType.value == nil {
+		return []byte{0x01, 0x00}, nil
+	}
+
 	return pubKeyType.Bytes()
 }
 
 func (sigType Sig) StateHex() (string, error) {
-	return sigType.Hex()
+	b, err := sigType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (sigType Sig) StateBytes() ([]byte, error) {
+
+	if sigType.value == nil {
+		return []byte{0x01, 0x00}, nil
+	}
+
 	return sigType.Bytes()
 }
 
@@ -144,33 +163,94 @@ func (opCodeType OpCodeType) StateBytes() ([]byte, error) {
 }
 
 func (arrayType Array) StateHex() (string, error) {
-	return arrayType.Hex()
+	b, err := arrayType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (arrayType Array) StateBytes() ([]byte, error) {
-	return arrayType.Bytes()
+	var res []byte
+	var buff bytes.Buffer
+	for _, elem := range arrayType.values {
+		b, err := elem.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		buff.Write(b)
+	}
+	return buff.Bytes(), nil
 }
 
 func (structType Struct) StateHex() (string, error) {
-	return structType.Hex()
+	b, err := structType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (structType Struct) StateBytes() ([]byte, error) {
-	return structType.Bytes()
+	var res []byte
+	var buff bytes.Buffer
+	for _, key := range structType.keysInOrder {
+		elem := structType.values[key]
+		b, err := elem.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		buff.Write(b)
+	}
+	return buff.Bytes(), nil
 }
 
 func (libraryType Library) StateHex() (string, error) {
-	return libraryType.Hex()
+	b, err := libraryType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
 func (libraryType Library) StateBytes() ([]byte, error) {
-	return libraryType.Bytes()
+	var res []byte
+	var buff bytes.Buffer
+	for _, key := range libraryType.propertyKeysInOrder {
+		elem := libraryType.properties[key]
+		b, err := elem.StateBytes()
+		if err != nil {
+			return res, err
+		}
+		buff.Write(b)
+	}
+	return buff.Bytes(), nil
 }
 
 func (hashedMapType HashedMap) StateHex() (string, error) {
-	return hashedMapType.Hex()
+
+	b, err := hashedMapType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
+
 }
 
 func (hashedMapType HashedMap) StateBytes() ([]byte, error) {
+
 	return hashedMapType.Bytes()
+}
+
+func (hashedSetType HashedSet) StateHex() (string, error) {
+	b, err := hashedSetType.StateBytes()
+	if err != nil {
+		return "", err
+	}
+	return EvenHexStr(fmt.Sprintf("%x", b)), nil
+}
+
+func (hashedSetType HashedSet) StateBytes() ([]byte, error) {
+
+	return hashedSetType.Bytes()
 }
