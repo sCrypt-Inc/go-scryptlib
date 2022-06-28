@@ -117,7 +117,7 @@ func (contract *Contract) SetConstructorParams(params map[string]ScryptType) err
 			return err
 		}
 
-		paramPlaceholder.Value = value
+		paramPlaceholder.Value = value.Clone()
 	}
 
 	return nil
@@ -183,7 +183,7 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 			return err
 		}
 
-		paramPlaceholder.Value = value
+		paramPlaceholder.Value = value.Clone()
 	}
 
 	return nil
@@ -508,7 +508,7 @@ func (contract *Contract) UpdateStateVariable(variableName string, value ScryptT
 			return errors.New(fmt.Sprintf("Variable \"%s\" value must be of type %T. Actual type is %T.", variableName, param.Value, value))
 		}
 
-		param.Value = value
+		param.Value = value.Clone()
 		contract.firstCall = false
 		return nil
 	}
