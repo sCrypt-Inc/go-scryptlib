@@ -6,16 +6,12 @@ GITHUB_REPO="compiler_dist"
 GLOB_INST_DIR="/usr/local/bin"
 LOCAL_INST_DIR="$HOME/.local/bin"
 BIN_NAME="scryptc"
-SKIP_PROMPT=0
 DISPLAY_HELP=0
-UNINSTALL=0
 
-while getopts "v:fhu" c; do
+while getopts "v:h" c; do
     case $c in
       v) COMPILER_VERSION="$OPTARG" ;;
-      f) SKIP_PROMPT=1 ;;
       h) DISPLAY_HELP=1 ;;
-      u) UNINSTALL=1 ;;
     esac
 done
 
@@ -24,8 +20,6 @@ if [ $DISPLAY_HELP = 1 ]; then
     echo ""
     echo "-h Print help."
     echo "-v Install specific version compiler."
-    echo "-f Skip all prompts."
-    echo "-u Uninstall sCrypt."
     exit 0
 fi
 
@@ -58,45 +52,11 @@ fi
 # Create install dir if it doesn't exist yet.
 mkdir -p $INSTALL_DIR
 
-# Uninstallation procedure
-if [ $UNINSTALL = 1 ]; then
-    if [ -f "$INSTALL_DIR/$BIN_NAME" ]; then
-        echo "You are about to uninstall the sCrypt compiler installed at: $INSTALL_DIR/$BIN_NAME"
-        echo
-        if [ $SKIP_PROMPT = 0 ]; then
-            read -p "Proceed? [y/n] " continue < /dev/tty || exit 3
-            if [ ! $continue = "y" -a ! $continue = "Y" ]; then
-                exit 3
-            fi
-        fi
-        rm $INSTALL_DIR/$BIN_NAME
-        echo "The sCrypt compiler was successfully uninstalled."
-        exit 0
-    else
-        echo "No compiler found."
-        exit 4
-    fi
-fi
-
 # Installation procedure
 echo "You are about to download and install scryptc $GITHUB_TAG for $URL_POSTFIX."
 echo
 echo "The compiler will be installed to $INSTALL_DIR/$BIN_NAME. Make sure, that the containing directory is in your PATH."
-if [ -f "$INSTALL_DIR/$BIN_NAME" ]; then
-    echo "An existing compiler binary already exists in $INSTALL_DIR/$BIN_NAME. It will be overwritten."
-fi
-echo
-if [ $SKIP_PROMPT = 0 ]; then
-    read -p "Proceed with installation? [y/n] " continue < /dev/tty || exit 3
-    if [ ! $continue = "y" -a ! $continue = "Y" ]; then
-        exit 3
-    fi
-fi
 
-# Remove old install if it exists.
-if [ -f "$INSTALL_DIR/$BIN_NAME" ]; then
-    rm $INSTALL_DIR/$BIN_NAME
-fi
 
 # Download and install the compiler.
 DL_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${GITHUB_TAG}/scryptc-${COMPILER_VERSION}-${URL_POSTFIX}"
