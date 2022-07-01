@@ -1249,6 +1249,80 @@ func TestContractLibAsState1(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func insertMap(t *testing.T, example *Contract, hashedMap *HashedMap, iKey int64, iVal int64) {
+	prevLockingScript, err := example.GetLockingScript()
+
+	assert.NoError(t, err)
+	prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
+
+	key := Int{big.NewInt(iKey)}
+	val := Int{big.NewInt(iVal)}
+	hashedMap.Set(key, val)
+
+	sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
+	assert.NoError(t, err)
+
+	err = sorteitem.UpdateValue("item", key)
+	assert.NoError(t, err)
+
+	idx, err := hashedMap.KeyIndex(key)
+	assert.NoError(t, err)
+
+	err = sorteitem.UpdateValue("idx", Int{big.NewInt(idx)})
+	assert.NoError(t, err)
+
+	entry, err := example.GetStructTypeTemplate("MapEntry")
+	assert.NoError(t, err)
+	entry.UpdateValue("key", sorteitem)
+	entry.UpdateValue("val", val)
+
+	states := map[string]ScryptType{
+		"map": *hashedMap,
+	}
+
+	newLockingScript, err := example.getNewStateScript(states)
+
+	assert.NoError(t, err)
+
+	tx := bt.NewTx()
+	err = tx.From(
+		"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
+		0,
+		prevLockingScriptHex,
+		300000)
+	assert.NoError(t, err)
+	currOutput := bt.Output{
+		Satoshis:      300000,
+		LockingScript: newLockingScript,
+	}
+	tx.AddOutput(&currOutput)
+
+	preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"entry":    entry,
+		"preimage": SigHashPreimage{preimage},
+	}
+	err = example.SetPublicFunctionParams("insert", unlockParams)
+	assert.NoError(t, err)
+
+	executionContext := ExecutionContext{
+		Tx:       tx,
+		InputIdx: 0,
+		Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
+	}
+
+	example.SetExecutionContext(executionContext)
+	success, err := example.EvaluatePublicFunction("insert")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+	//should update state after EvaluatePublicFunction
+	err = example.UpdateStateVariables(states)
+	assert.NoError(t, err)
+}
+
 func TestContractHashedMapAsState(t *testing.T) {
 
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/LibAsState2.scrypt")
@@ -1270,230 +1344,13 @@ func TestContractHashedMapAsState(t *testing.T) {
 	assert.NoError(t, err)
 
 	// insert 111-111111
-	{
-		prevLockingScript, err := example.GetLockingScript()
-
-		assert.NoError(t, err)
-		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
-
-		key := Int{big.NewInt(111)}
-		val := Int{big.NewInt(111111)}
-		hashedMap.Set(key, val)
-
-		sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("item", key)
-		assert.NoError(t, err)
-
-		idx, err := hashedMap.KeyIndex(key)
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("idx", Int{big.NewInt(idx)})
-		assert.NoError(t, err)
-
-		entry, err := example.GetStructTypeTemplate("MapEntry")
-		assert.NoError(t, err)
-		entry.UpdateValue("key", sorteitem)
-		entry.UpdateValue("val", val)
-
-		states := map[string]ScryptType{
-			"map": hashedMap,
-		}
-
-		newLockingScript, err := example.getNewStateScript(states)
-
-		assert.NoError(t, err)
-
-		tx := bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
-			0,
-			prevLockingScriptHex,
-			300000)
-		assert.NoError(t, err)
-		currOutput := bt.Output{
-			Satoshis:      300000,
-			LockingScript: newLockingScript,
-		}
-		tx.AddOutput(&currOutput)
-
-		preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
-
-		unlockParams := map[string]ScryptType{
-			"entry":    entry,
-			"preimage": SigHashPreimage{preimage},
-		}
-		err = example.SetPublicFunctionParams("insert", unlockParams)
-		assert.NoError(t, err)
-
-		executionContext := ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
-
-		example.SetExecutionContext(executionContext)
-		success, err := example.EvaluatePublicFunction("insert")
-		assert.NoError(t, err)
-		assert.Equal(t, true, success)
-
-		//should update state after EvaluatePublicFunction
-		err = example.UpdateStateVariables(states)
-		assert.NoError(t, err)
-	}
+	insertMap(t, &example, &hashedMap, 111, 111111)
 
 	// insert 222-22222
-	{
-		prevLockingScript, err := example.GetLockingScript()
-
-		assert.NoError(t, err)
-		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
-
-		key := Int{big.NewInt(222)}
-		val := Int{big.NewInt(22222)}
-		hashedMap.Set(key, val)
-
-		sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("item", key)
-		assert.NoError(t, err)
-
-		idx, err := hashedMap.KeyIndex(key)
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("idx", Int{big.NewInt(idx)})
-		assert.NoError(t, err)
-
-		entry, err := example.GetStructTypeTemplate("MapEntry")
-		assert.NoError(t, err)
-		entry.UpdateValue("key", sorteitem)
-		entry.UpdateValue("val", val)
-
-		states := map[string]ScryptType{
-			"map": hashedMap,
-		}
-
-		newLockingScript, err := example.getNewStateScript(states)
-
-		assert.NoError(t, err)
-
-		tx := bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
-			0,
-			prevLockingScriptHex,
-			300000)
-		assert.NoError(t, err)
-		currOutput := bt.Output{
-			Satoshis:      300000,
-			LockingScript: newLockingScript,
-		}
-		tx.AddOutput(&currOutput)
-
-		preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
-
-		unlockParams := map[string]ScryptType{
-			"entry":    entry,
-			"preimage": SigHashPreimage{preimage},
-		}
-		err = example.SetPublicFunctionParams("insert", unlockParams)
-		assert.NoError(t, err)
-
-		executionContext := ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
-
-		example.SetExecutionContext(executionContext)
-		success, err := example.EvaluatePublicFunction("insert")
-		assert.NoError(t, err)
-		assert.Equal(t, true, success)
-
-		//should update state after EvaluatePublicFunction
-		err = example.UpdateStateVariables(states)
-		assert.NoError(t, err)
-	}
+	insertMap(t, &example, &hashedMap, 222, 22222)
 
 	// insert 333-33333
-	{
-		prevLockingScript, err := example.GetLockingScript()
-
-		assert.NoError(t, err)
-		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
-
-		key := Int{big.NewInt(333)}
-		val := Int{big.NewInt(33333)}
-
-		hashedMap.Set(key, val)
-
-		sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("item", key)
-		assert.NoError(t, err)
-
-		idx, err := hashedMap.KeyIndex(key)
-		assert.NoError(t, err)
-
-		err = sorteitem.UpdateValue("idx", Int{big.NewInt(idx)})
-		assert.NoError(t, err)
-
-		entry, err := example.GetStructTypeTemplate("MapEntry")
-		assert.NoError(t, err)
-		entry.UpdateValue("key", sorteitem)
-		entry.UpdateValue("val", val)
-
-		states := map[string]ScryptType{
-			"map": hashedMap,
-		}
-
-		newLockingScript, err := example.getNewStateScript(states)
-
-		assert.NoError(t, err)
-
-		tx := bt.NewTx()
-		err = tx.From(
-			"a477ff6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458",
-			0,
-			prevLockingScriptHex,
-			300000)
-		assert.NoError(t, err)
-		currOutput := bt.Output{
-			Satoshis:      300000,
-			LockingScript: newLockingScript,
-		}
-		tx.AddOutput(&currOutput)
-
-		preimage, err := tx.CalcInputPreimage(0, sighash.AllForkID)
-		assert.NoError(t, err)
-
-		unlockParams := map[string]ScryptType{
-			"entry":    entry,
-			"preimage": SigHashPreimage{preimage},
-		}
-		err = example.SetPublicFunctionParams("insert", unlockParams)
-		assert.NoError(t, err)
-
-		executionContext := ExecutionContext{
-			Tx:       tx,
-			InputIdx: 0,
-			Flags:    scriptflag.EnableSighashForkID | scriptflag.UTXOAfterGenesis,
-		}
-
-		example.SetExecutionContext(executionContext)
-		success, err := example.EvaluatePublicFunction("insert")
-		assert.NoError(t, err)
-		assert.Equal(t, true, success)
-
-		//should update state after EvaluatePublicFunction
-		err = example.UpdateStateVariables(states)
-		assert.NoError(t, err)
-	}
+	insertMap(t, &example, &hashedMap, 333, 33333)
 
 }
 
