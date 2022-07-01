@@ -15,6 +15,7 @@ import (
 	"github.com/libsv/go-bk/bec"
 	"github.com/libsv/go-bt/v2/bscript"
 	"github.com/libsv/go-bt/v2/sighash"
+	"github.com/thoas/go-funk"
 )
 
 var BASIC_SCRYPT_TYPES = map[string]bool{
@@ -41,6 +42,7 @@ type ScryptType interface {
 	GetTypeString() string
 	StateHex() (string, error)
 	StateBytes() ([]byte, error)
+	Clone() ScryptType
 }
 
 type Int struct {
@@ -51,8 +53,10 @@ func NewInt(val int64) Int {
 	return Int{big.NewInt(val)}
 }
 
-func (intType Int) Clone() Int {
-	return Int{intType.value}
+func (intType Int) Clone() ScryptType {
+	c := new(big.Int)
+	c = c.Set(intType.value)
+	return Int{c}
 }
 
 func (intType Int) Hex() (string, error) {
@@ -112,7 +116,7 @@ func NewBool(val bool) Bool {
 	return Bool{val}
 }
 
-func (boolType Bool) Clone() Bool {
+func (boolType Bool) Clone() ScryptType {
 	return Bool{boolType.value}
 }
 
@@ -150,6 +154,12 @@ type Bytes struct {
 
 func NewBytes(val []byte) Bytes {
 	return Bytes{val}
+}
+
+func (bytesType Bytes) Clone() ScryptType {
+	c := make([]byte, len(bytesType.value))
+	copy(c, bytesType.value)
+	return Bytes{c}
 }
 
 func (bytesType Bytes) Hex() (string, error) {
@@ -204,6 +214,18 @@ func (privKeyType PrivKey) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
+func (privKeyType PrivKey) Clone() ScryptType {
+
+	if privKeyType.value == nil {
+		return PrivKey{nil}
+	}
+	b := privKeyType.value.Serialise()
+
+	priv, _ := bec.PrivKeyFromBytes(bec.S256(), b)
+
+	return PrivKey{priv}
+}
+
 func (privKeyType PrivKey) Bytes() ([]byte, error) {
 
 	if privKeyType.value == nil {
@@ -251,6 +273,18 @@ func NewPubKey(val *bec.PublicKey) PubKey {
 	return PubKey{val}
 }
 
+func (pubKeyType PubKey) Clone() ScryptType {
+
+	if pubKeyType.value == nil {
+		return PubKey{nil}
+	}
+	b := pubKeyType.value.SerialiseCompressed()
+
+	pubkey, _ := bec.ParsePubKey(b, bec.S256())
+
+	return PubKey{pubkey}
+}
+
 func (pubKeyType PubKey) Hex() (string, error) {
 	b, err := pubKeyType.Bytes()
 	if err != nil {
@@ -291,6 +325,16 @@ func (pubKeyType PubKey) MarshalJSON() ([]byte, error) {
 type Sig struct {
 	value *bec.Signature
 	shf   sighash.Flag
+}
+
+func (sigType Sig) Clone() ScryptType {
+
+	if sigType.value == nil {
+		return Sig{nil, sigType.shf}
+	}
+	b := sigType.value.Serialise()
+	sig, _ := bec.ParseDERSignature(b, bec.S256())
+	return Sig{sig, sigType.shf}
 }
 
 func (sigType Sig) Hex() (string, error) {
@@ -349,6 +393,12 @@ func (ripemd160Type Ripemd160) Hex() (string, error) {
 		return "", err
 	}
 	return EvenHexStr(fmt.Sprintf("%x", b)), nil
+}
+
+func (ripemd160Type Ripemd160) Clone() ScryptType {
+	dst := make([]byte, len(ripemd160Type.value))
+	copy(dst, ripemd160Type.value)
+	return Ripemd160{dst}
 }
 
 func (ripemd160Type Ripemd160) Bytes() ([]byte, error) {
@@ -416,6 +466,12 @@ func (sha1Type Sha1) Hex() (string, error) {
 	return EvenHexStr(fmt.Sprintf("%x", b)), nil
 }
 
+func (sha1Type Sha1) Clone() ScryptType {
+	dst := make([]byte, len(sha1Type.value))
+	copy(dst, sha1Type.value)
+	return Sha1{dst}
+}
+
 func (sha1Type Sha1) Bytes() ([]byte, error) {
 
 	if len(sha1Type.value) == 0 {
@@ -449,6 +505,12 @@ type Sha256 struct {
 
 func NewSha256(val []byte) Sha256 {
 	return Sha256{val}
+}
+
+func (sha256Type Sha256) Clone() ScryptType {
+	dst := make([]byte, len(sha256Type.value))
+	copy(dst, sha256Type.value)
+	return Sha256{dst}
 }
 
 func (sha256Type Sha256) Hex() (string, error) {
@@ -493,6 +555,12 @@ func NewSighHashType(val []byte) SigHashType {
 	return SigHashType{val}
 }
 
+func (sigHashType SigHashType) Clone() ScryptType {
+	dst := make([]byte, len(sigHashType.value))
+	copy(dst, sigHashType.value)
+	return SigHashType{dst}
+}
+
 func (sigHashType SigHashType) Hex() (string, error) {
 	b, err := sigHashType.Bytes()
 	if err != nil {
@@ -533,6 +601,12 @@ type SigHashPreimage struct {
 
 func NewSigHashPreimage(val []byte) SigHashPreimage {
 	return SigHashPreimage{val}
+}
+
+func (sigHashPreimageType SigHashPreimage) Clone() ScryptType {
+	dst := make([]byte, len(sigHashPreimageType.value))
+	copy(dst, sigHashPreimageType.value)
+	return SigHashPreimage{dst}
 }
 
 func (sigHashPreimageType SigHashPreimage) Hex() (string, error) {
@@ -577,6 +651,12 @@ func NewOpCodeType(val []byte) OpCodeType {
 	return OpCodeType{val}
 }
 
+func (opCodeType OpCodeType) Clone() ScryptType {
+	dst := make([]byte, len(opCodeType.value))
+	copy(dst, opCodeType.value)
+	return OpCodeType{dst}
+}
+
 func (opCodeType OpCodeType) Hex() (string, error) {
 	b, err := opCodeType.Bytes()
 	if err != nil {
@@ -617,6 +697,13 @@ type Array struct {
 
 func NewArray(val []ScryptType) Array {
 	return Array{val}
+}
+
+func (array Array) Clone() ScryptType {
+	c := funk.Map(array.values, func(a ScryptType) ScryptType {
+		return a.Clone()
+	}).([]ScryptType)
+	return Array{c}
 }
 
 func (arrayType Array) Hex() (string, error) {
@@ -674,6 +761,30 @@ type Struct struct {
 	keysInOrder  []string
 	values       map[string]ScryptType
 	genericTypes []GenericType
+}
+
+func (st Struct) Clone() ScryptType {
+
+	keysInOrder := funk.Map(st.keysInOrder, func(key string) string {
+		return key
+	}).([]string)
+
+	genericTypes := funk.Map(st.genericTypes, func(genericType GenericType) GenericType {
+		return genericType
+	}).([]GenericType)
+
+	values := make(map[string]ScryptType)
+
+	for k, v := range st.values {
+		values[k] = v.Clone()
+	}
+
+	return Struct{
+		typeName:     st.typeName,
+		keysInOrder:  keysInOrder,
+		values:       values,
+		genericTypes: genericTypes,
+	}
 }
 
 func (structType Struct) Hex() (string, error) {
@@ -752,6 +863,42 @@ type Library struct {
 	propertyKeysInOrder []string
 	properties          map[string]ScryptType
 	genericTypes        []GenericType
+}
+
+func (l Library) Clone() ScryptType {
+
+	paramKeysInOrder := funk.Map(l.paramKeysInOrder, func(key string) string {
+		return key
+	}).([]string)
+
+	params := make(map[string]ScryptType)
+
+	for k, v := range l.params {
+		params[k] = v.Clone()
+	}
+
+	propertyKeysInOrder := funk.Map(l.propertyKeysInOrder, func(key string) string {
+		return key
+	}).([]string)
+
+	properties := make(map[string]ScryptType)
+
+	for k, v := range l.properties {
+		properties[k] = v.Clone()
+	}
+
+	genericTypes := funk.Map(l.genericTypes, func(genericType GenericType) GenericType {
+		return genericType
+	}).([]GenericType)
+
+	return Library{
+		typeName:            l.typeName,
+		paramKeysInOrder:    paramKeysInOrder,
+		params:              params,
+		propertyKeysInOrder: propertyKeysInOrder,
+		properties:          properties,
+		genericTypes:        genericTypes,
+	}
 }
 
 func (libraryType Library) ctor() bool {
@@ -848,6 +995,16 @@ type HashedMap struct {
 
 func (hashedMapType HashedMap) GetTypeString() string {
 	return "HashedMap"
+}
+
+func (hashedMapType HashedMap) Clone() ScryptType {
+	values := make(map[[32]byte][32]byte)
+
+	for k, v := range hashedMapType.values {
+		values[k] = v
+	}
+
+	return HashedMap{values}
 }
 
 func (hashedMapType *HashedMap) Set(key ScryptType, val ScryptType) error {
@@ -1007,6 +1164,16 @@ func NewHashedMap() HashedMap {
 
 type HashedSet struct {
 	values map[[32]byte]bool
+}
+
+func (hashedSetType HashedSet) Clone() ScryptType {
+	values := make(map[[32]byte]bool)
+
+	for k, v := range hashedSetType.values {
+		values[k] = v
+	}
+
+	return HashedSet{values}
 }
 
 func (hashedSetType HashedSet) GetTypeString() string {

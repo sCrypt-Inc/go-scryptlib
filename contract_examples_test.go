@@ -1260,8 +1260,10 @@ func TestContractHashedMapAsState(t *testing.T) {
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
 
+	hashedMap := NewHashedMap()
+
 	constructorParams := map[string]ScryptType{
-		"map": NewHashedMap(),
+		"map": hashedMap,
 	}
 
 	err = example.SetConstructorParams(constructorParams)
@@ -1273,9 +1275,6 @@ func TestContractHashedMapAsState(t *testing.T) {
 
 		assert.NoError(t, err)
 		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
-
-		// should new one
-		hashedMap := NewHashedMap()
 
 		key := Int{big.NewInt(111)}
 		val := Int{big.NewInt(111111)}
@@ -1352,11 +1351,8 @@ func TestContractHashedMapAsState(t *testing.T) {
 		assert.NoError(t, err)
 		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
 
-		hashedMap := NewHashedMap()
-
 		key := Int{big.NewInt(222)}
 		val := Int{big.NewInt(22222)}
-		hashedMap.Set(Int{big.NewInt(111)}, Int{big.NewInt(111111)})
 		hashedMap.Set(key, val)
 
 		sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
@@ -1430,12 +1426,9 @@ func TestContractHashedMapAsState(t *testing.T) {
 		assert.NoError(t, err)
 		prevLockingScriptHex := hex.EncodeToString(*prevLockingScript)
 
-		hashedMap := NewHashedMap()
-
 		key := Int{big.NewInt(333)}
 		val := Int{big.NewInt(33333)}
-		hashedMap.Set(Int{big.NewInt(111)}, Int{big.NewInt(111111)})
-		hashedMap.Set(Int{big.NewInt(222)}, Int{big.NewInt(22222)})
+
 		hashedMap.Set(key, val)
 
 		sorteitem, err := example.GetStructTypeTemplate("SortedItem<int>")
