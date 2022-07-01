@@ -9,9 +9,9 @@ import (
 
 	"github.com/libsv/go-bk/crypto"
 	"github.com/libsv/go-bk/wif"
-	"github.com/libsv/go-bt/v2"
-	"github.com/libsv/go-bt/v2/bscript/interpreter/scriptflag"
-	"github.com/libsv/go-bt/v2/sighash"
+	"github.com/sCrypt-Inc/go-bt/v2"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript/interpreter/scriptflag"
+	"github.com/sCrypt-Inc/go-bt/v2/sighash"
 )
 
 func TestContractDemo(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/libsv/go-bt/v2"
-	"github.com/libsv/go-bt/v2/bscript"
-	"github.com/libsv/go-bt/v2/bscript/interpreter"
-	"github.com/libsv/go-bt/v2/bscript/interpreter/scriptflag"
+	"github.com/sCrypt-Inc/go-bt/v2"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript/interpreter"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript/interpreter/scriptflag"
 	"github.com/thoas/go-funk"
 )
 

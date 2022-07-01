@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/libsv/go-bt/v2/bscript"
+	"github.com/sCrypt-Inc/go-bt/v2/bscript"
 	"github.com/thoas/go-funk"
 )
 
