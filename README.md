@@ -1,3 +1,5 @@
+[![CI](https://github.com/sCrypt-Inc/go-scryptlib/actions/workflows/main.yml/badge.svg)](https://github.com/sCrypt-Inc/go-scryptlib/actions/workflows/main.yml)
+
 # go-scryptlib
 An [sCrypt](https://scrypt.io/) SDK for the Go language.
 
