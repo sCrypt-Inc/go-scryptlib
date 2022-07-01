@@ -31,5 +31,6 @@ jobs:
       # Runs a single command using the runners shell
       - name: Download sCrypt Compiler
         run: curl -Ls https://scrypt.io/setup | sh -s --
+        shell: bash
       - name: Run test
         run: go test -v
