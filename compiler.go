@@ -27,11 +27,13 @@ var CURRENT_CONTRACT_DESCRIPTION_VERSION = 8
 var SOURCE_REGEXP = regexp.MustCompile(`^(?P<fileIndex>-?\d+):(?P<line>\d+):(?P<col>\d+):(?P<endLine>\d+):(?P<endCol>\d+)(#(?P<tagStr>.+))?`)
 var WARNING_REGEXP = regexp.MustCompile(`Warning:(\s|\n)*(?P<filePath>[^\s]+):(?P<line>\d+):(?P<column>\d+):(?P<line1>\d+):(?P<column1>\d+):*\n(?P<message>[^\n]+)\n`)
 
-var DebugModeTag = map[string]string{
-	"FUNC_START": "F0",
-	"FUNC_END":   "F1",
-	"LOOP_START": "L0",
-}
+type DebugModeTag string
+
+const (
+	FUNC_START DebugModeTag = "F0"
+	FUNC_END   DebugModeTag = "F1"
+	LOOP_START DebugModeTag = "L0"
+)
 
 type BuildType string
 
@@ -142,20 +144,20 @@ func (compilerResult CompilerResult) ToDesc() DescriptionFile {
 func (compilerResult CompilerResult) ToDescWSourceMap() (DescriptionFile, error) {
 	res := compilerResult.ToDesc()
 
-	output := compilerResult.CompilerOutAsm["output"].([]interface{})
-	if len(output) == 0 {
+	outputs := compilerResult.CompilerOutAsm["output"].([]Output)
+	if len(outputs) == 0 {
 		return res, nil
 	}
 
-	firstElem := output[0].(map[string]interface{})
-	if _, ok := firstElem["src"]; !ok {
-		return res, errors.New("Missing source map data in compiler results. Run compiler with debug flag.")
+	firstElem := outputs[0]
+	if firstElem.Src == "" {
+		return res, errors.New("missing source map data in compiler results. Run compiler with debug flag")
 	}
 
 	var sources []string
-	for _, source := range compilerResult.CompilerOutAsm["sources"].([]interface{}) {
-		sources = append(sources, source.(string))
-	}
+
+	sources = append(sources, compilerResult.CompilerOutAsm["sources"].([]string)...)
+
 	sourcesFullpath, err := getSourcesFullpath(sources)
 	if err != nil {
 		return res, err
@@ -165,9 +167,8 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (DescriptionFile, error)
 	res.Sources = sourcesFullpath
 
 	var sourceMap []string
-	for _, item := range compilerResult.CompilerOutAsm["output"].([]interface{}) {
-		item := item.(map[string]interface{})
-		sourceMap = append(sourceMap, item["src"].(string))
+	for _, item := range outputs {
+		sourceMap = append(sourceMap, item.Src)
 	}
 	res.SourceMap = sourceMap
 
@@ -507,6 +508,27 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 	}, nil
 }
 
+type Output struct {
+	Hex     string   `json:"hex"`
+	Src     string   `json:"src"`
+	Opcode  string   `json:"opcode"`
+	TopVars []string `json:"topVars"`
+}
+
+type AutoTypedVar struct {
+	Name string `json:"name"`
+	Src  string `json:"src"`
+	Type string `json:"type"`
+}
+
+type Position struct {
+	File      string `json:"file"`
+	Line      int    `json:"line"`
+	EndLine   int    `json:"endLine"`
+	Column    int    `json:"column"`
+	EndColumn int    `json:"endColumn"`
+}
+
 func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (ResultsAsm, error) {
 	var res ResultsAsm
 
@@ -521,34 +543,77 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 		}
 	}()
 
-	contentAsm, err := io.ReadAll(fileAsm)
-	if err != nil {
-		return res, err
-	}
-
-	var asmTree map[string]interface{}
-	json.Unmarshal(contentAsm, &asmTree)
+	decoder := json.NewDecoder(fileAsm)
 
 	var sources []string
-	for _, source := range asmTree["sources"].([]interface{}) {
-		sources = append(sources, source.(string))
+
+	decoder.Token()
+	decoder.Token()
+	decoder.Token()
+	for decoder.More() {
+
+		s, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+
+		sources = append(sources, s.(string))
 	}
+
 	sourcesFullpath, err := getSourcesFullpath(sources)
 	if err != nil {
 		return res, err
 	}
+	decoder.Token()
+	decoder.Token()
+	decoder.Token()
+	var outputs []Output
+	for decoder.More() {
 
-	var asmItems []map[string]interface{}
-	for _, output := range asmTree["output"].([]interface{}) {
-		output := output.(map[string]interface{})
+		var output Output
+		err = decoder.Decode(&output)
+		if err == io.EOF {
+			break
+		}
+
+		outputs = append(outputs, output)
+	}
+	decoder.Token()
+	decoder.Token()
+	decoder.Token()
+
+	var autovars []AutoTypedVar
+
+	for decoder.More() {
+
+		var autoTypedVar AutoTypedVar
+		err = decoder.Decode(&autoTypedVar)
+		if err == io.EOF {
+			break
+		}
+
+		autovars = append(autovars, autoTypedVar)
+	}
+
+	decoder.Token()
+	decoder.Token()
+	_, err = decoder.Token()
+
+	if err == nil || err.Error() != "EOF" {
+		return res, err
+	}
+
+	var asmTree map[string]interface{} = make(map[string]interface{})
+	var asmItems []map[string]interface{} = make([]map[string]interface{}, 0)
+	for _, output := range outputs {
 
 		if !compilerWrapper.Debug {
-			opcode := output["opcode"].(string)
-			hex := output["hex"].(string)
+			opcode := output.Opcode
+			hex := output.Hex
 			asmItems = append(asmItems, map[string]interface{}{"opcode": opcode, "hex": hex})
 		}
 
-		match := reSubMatchMap(SOURCE_REGEXP, output["src"].(string))
+		match := reSubMatchMap(SOURCE_REGEXP, output.Src)
 		if len(match) > 0 {
 			fileIdx, err := strconv.Atoi(match["fileIndex"])
 			if err != nil {
@@ -558,64 +623,70 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 			var debugTag string
 			tagStr, ok := match["tagStr"]
 			if ok {
-				if match, _ := regexp.MatchString(`\w+\.\w+:0`, tagStr); match == true {
-					debugTag = DebugModeTag["FUNC_START"]
-				} else if match, _ := regexp.MatchString(`\w+\.\w+:1`, tagStr); match == true {
-					debugTag = DebugModeTag["FUNC_END"]
-				} else if match, _ := regexp.MatchString(`loop:0`, tagStr); match == true {
-					debugTag = DebugModeTag["LOOP_START"]
+				if tagStr == `loop:0` {
+					debugTag = string(LOOP_START)
+				} else if strings.HasSuffix(tagStr, ":0") {
+					debugTag = string(FUNC_START)
+				} else if strings.HasSuffix(tagStr, ":1") {
+					debugTag = string(FUNC_END)
 				}
 			}
 
-			pos := make(map[string]interface{})
+			var pos Position
 			if fileIdx != -1 && len(sources) > fileIdx {
-				pos["file"] = sourcesFullpath[fileIdx]
+				pos.File = sourcesFullpath[fileIdx]
 
 				line, err := strconv.Atoi(match["line"])
 				if err != nil {
 					return res, err
 				}
+				pos.Line = line
+
 				endLine, err := strconv.Atoi(match["endLine"])
 				if err != nil {
 					return res, err
 				}
+				pos.EndLine = endLine
+
 				column, err := strconv.Atoi(match["col"])
 				if err != nil {
 					return res, err
 				}
+				pos.Column = column
+
 				endColumn, err := strconv.Atoi(match["endCol"])
 				if err != nil {
 					return res, err
 				}
-				pos["line"] = line
-				pos["endLine"] = endLine
-				pos["column"] = column
-				pos["endColumn"] = endColumn
+
+				pos.EndColumn = endColumn
+
 			}
 
 			asmItem := make(map[string]interface{})
-			asmItem["opcode"] = output["opcode"]
-			asmItem["hex"] = output["hex"]
-			asmItem["stack"] = output["stack"]
+			asmItem["opcode"] = output.Opcode
+			asmItem["hex"] = output.Hex
+			asmItem["stack"] = ""
 			asmItem["pos"] = pos
 			asmItem["debugTag"] = debugTag
 			asmItems = append(asmItems, asmItem)
 		}
 	}
 
+	asmTree["sources"] = sources
+	asmTree["output"] = outputs
+
 	var autoTypedVars []map[string]interface{}
 	if compilerWrapper.Debug {
-		for _, item := range asmTree["autoTypedVars"].([]interface{}) {
-			item := item.(map[string]interface{})
-
-			match := reSubMatchMap(SOURCE_REGEXP, item["src"].(string))
+		for _, item := range autovars {
+			match := reSubMatchMap(SOURCE_REGEXP, item.Src)
 			if len(match) > 0 {
 				fileIdx, err := strconv.Atoi(match["fileIndex"])
 				if err != nil {
 					return res, err
 				}
 
-				pos := make(map[string]interface{})
+				var pos Position
 				if len(sources) > fileIdx {
 					s := sources[fileIdx]
 
@@ -625,31 +696,45 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 					} else {
 						posFile = "std"
 					}
-					pos["file"] = posFile
+					pos.File = posFile
 
 					line, err := strconv.Atoi(match["line"])
 					if err != nil {
 						return res, err
 					}
+
+					pos.Line = line
+
 					endLine, err := strconv.Atoi(match["endLine"])
 					if err != nil {
 						return res, err
 					}
+
+					pos.EndLine = endLine
+
 					column, err := strconv.Atoi(match["col"])
 					if err != nil {
 						return res, err
 					}
+
+					pos.Column = column
+
 					endColumn, err := strconv.Atoi(match["endCol"])
 					if err != nil {
 						return res, err
 					}
-					pos["line"] = line
-					pos["endLine"] = endLine
-					pos["column"] = column
-					pos["endColumn"] = endColumn
 
-					autoTypedVars = append(autoTypedVars, pos)
+					pos.EndColumn = endColumn
+
 				}
+
+				var a map[string]interface{} = map[string]interface{}{}
+
+				a["name"] = item.Name
+				a["pos"] = pos
+				a["type"] = item.Type
+
+				autoTypedVars = append(autoTypedVars, a)
 
 			}
 		}

@@ -2158,3 +2158,58 @@ func TestContractGenericsst8(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
 }
+
+func TestContractAutoVars(t *testing.T) {
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/autoTyped.scrypt")
+	assert.NoError(t, err)
+	assert.Equal(t, len(compilerResult.AutoTypedVars), 9)
+}
+
+func TestContractRingSig(t *testing.T) {
+
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/ringsig.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	example, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	p1, err := example.GetStructTypeTemplate("Point")
+	assert.NoError(t, err)
+
+	p1.UpdateValue("x", NewIntFromString("7924391421469906432901757298821162735566489774339422710006954392370024050997"))
+	p1.UpdateValue("y", NewIntFromString("30333735487554754395689860413927844784347933677713992514820950089261218089141"))
+
+	p2, err := example.GetStructTypeTemplate("Point")
+	assert.NoError(t, err)
+
+	p2.UpdateValue("x", NewIntFromString("75062971585741112317370442815620764474327916973933539203106139145490279619646"))
+	p2.UpdateValue("y", NewIntFromString("111781769103052824517795831588688758882743493346662320276163321700011949478918"))
+
+	constructorParams := map[string]ScryptType{
+		"pks": Array{[]ScryptType{p1, p2}},
+	}
+
+	err = example.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	sig, err := example.GetStructTypeTemplate("RSig")
+	assert.NoError(t, err)
+
+	sig.UpdateValue("c", NewIntFromString("114391156345011576047870853187755707695170583502685247542265050787140117240513"))
+	sig.UpdateValue("rs", Array{[]ScryptType{NewIntFromString("46246614607050366452098256417431867176157446563081251087948435708331732362934"), NewIntFromString("73896969853272221059696892879299968257884559656955908276035171164037688692147")}})
+
+	unlockParams := map[string]ScryptType{
+		"m":   NewBytesFromHex("74657374207363686e6f727220426974636f696e5356"),
+		"sig": sig,
+	}
+
+	err = example.SetPublicFunctionParams("verify", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := example.EvaluatePublicFunction("verify")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+}

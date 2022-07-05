@@ -53,6 +53,12 @@ func NewInt(val int64) Int {
 	return Int{big.NewInt(val)}
 }
 
+func NewIntFromString(val string) Int {
+	i := new(big.Int)
+	i.SetString(val, 10)
+	return Int{i}
+}
+
 func (intType Int) Clone() ScryptType {
 	c := new(big.Int)
 	c = c.Set(intType.value)
@@ -154,6 +160,15 @@ type Bytes struct {
 
 func NewBytes(val []byte) Bytes {
 	return Bytes{val}
+}
+
+func NewBytesFromHex(val string) Bytes {
+	h, err := hex.DecodeString(val)
+
+	if err != nil {
+		panic(err)
+	}
+	return Bytes{h}
 }
 
 func (bytesType Bytes) Clone() ScryptType {
