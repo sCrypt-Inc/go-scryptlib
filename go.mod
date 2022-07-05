@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/libsv/go-bk v0.1.6
-	github.com/sCrypt-Inc/go-bt/v2 v2.1.0-beta.8
+	github.com/sCrypt-Inc/go-bt/v2 v2.1.0-beta.9
 	github.com/stretchr/testify v1.7.4
 	github.com/thoas/go-funk v0.9.2
 )
