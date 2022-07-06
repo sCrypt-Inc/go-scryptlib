@@ -18,8 +18,7 @@ func TestContractDemo(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/demo.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	contractDemo, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -61,8 +60,7 @@ func TestContractP2PKH(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/p2pkh.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	contractP2PKH, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -122,8 +120,7 @@ func TestContractCounter(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/counter.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	counter, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -237,8 +234,7 @@ func TestContractStateCounter(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/statecounter.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	contractStateCounter, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -269,8 +265,7 @@ func TestContractDynamicArrayDemo(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/dynamicArrayDemo.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	contractDemo, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -291,8 +286,7 @@ func TestContractStateExample(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/state.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -403,8 +397,7 @@ func TestContractToken(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/token.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	token, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -527,8 +520,7 @@ func TestContractNestedStructArr(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractString(source)
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	nestedStructs, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -609,8 +601,7 @@ func TestContractLibAsProperty(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractString(source)
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	libAsPropertyTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -664,8 +655,7 @@ func TestContractLibAsPropertyWithOutConstructor(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractString(source)
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	libAsPropertyTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -699,8 +689,7 @@ func TestContractArraySimple(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/arraysimple.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -741,8 +730,7 @@ func TestContractArray(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractString(source)
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	testArray, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -778,8 +766,7 @@ func TestLibrary1(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library1.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	library1, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -821,8 +808,7 @@ func TestLibrary2(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library2.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	library2, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -864,8 +850,7 @@ func TestLibrary3(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library3.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	library3, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -907,8 +892,7 @@ func TestLibrary4(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/library4.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	library3, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1116,8 +1100,7 @@ func TestContractHashedMap(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/hashedmap.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	hashedmap, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1160,8 +1143,7 @@ func TestContractLibAsState1(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/LibAsState1.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1328,8 +1310,7 @@ func TestContractHashedMapAsState(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/LibAsState2.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1359,8 +1340,7 @@ func TestContractHashedmap1(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/hashedmap1.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	stateMapTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1430,8 +1410,7 @@ func TestContractHashedset1(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/hashedset1.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	stateSetTest, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1501,8 +1480,7 @@ func TestContractGenericSimple(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst_simple.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1540,8 +1518,7 @@ func TestContractGenericCtor(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst_ctor.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1621,8 +1598,7 @@ func TestContractGenericsst_alias(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst_alias.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1659,8 +1635,7 @@ func TestContractGenericsst(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1788,8 +1763,7 @@ func TestContractGenericsst1(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst1.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1837,8 +1811,7 @@ func TestContractGenericsst2(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst2.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1889,8 +1862,7 @@ func TestContractGenericsst4(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst4.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1929,8 +1901,7 @@ func TestContractGenericsst6(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst6.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -1982,8 +1953,7 @@ func TestContractGenericsst7(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst7.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -2089,8 +2059,7 @@ func TestContractGenericsst8(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/genericsst8.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -2170,8 +2139,7 @@ func TestContractRingSig(t *testing.T) {
 	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/ringsig.scrypt")
 	assert.NoError(t, err)
 
-	desc, err := compilerResult.ToDescWSourceMap()
-	assert.NoError(t, err)
+	desc := compilerResult.ToDesc()
 
 	example, err := NewContractFromDesc(desc)
 	assert.NoError(t, err)
@@ -2210,6 +2178,7 @@ func TestContractRingSig(t *testing.T) {
 	assert.NoError(t, err)
 
 	success, err := example.EvaluatePublicFunction("verify")
+
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
 }

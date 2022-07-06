@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 		OutDir:      "./out",
 		HexOut:      true,
 		Debug:       true,
-		Desc:        true,
+		Desc:        false,
 		Optimize:    false,
 		CmdArgs:     "",
 		Cwd:         "./",

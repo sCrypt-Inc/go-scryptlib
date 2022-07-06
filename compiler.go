@@ -1,7 +1,6 @@
 package scryptlib
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -144,19 +143,21 @@ func (compilerResult CompilerResult) ToDesc() DescriptionFile {
 func (compilerResult CompilerResult) ToDescWSourceMap() (DescriptionFile, error) {
 	res := compilerResult.ToDesc()
 
-	outputs := compilerResult.CompilerOutAsm["output"].([]Output)
+	outputs := compilerResult.CompilerOutAsm["output"].([]interface{})
 	if len(outputs) == 0 {
 		return res, nil
 	}
 
-	firstElem := outputs[0]
-	if firstElem.Src == "" {
+	firstElem := outputs[0].(map[string]interface{})
+	if _, ok := firstElem["src"]; !ok {
 		return res, errors.New("missing source map data in compiler results. Run compiler with debug flag")
 	}
 
 	var sources []string
 
-	sources = append(sources, compilerResult.CompilerOutAsm["sources"].([]string)...)
+	for _, source := range compilerResult.CompilerOutAsm["sources"].([]interface{}) {
+		sources = append(sources, source.(string))
+	}
 
 	sourcesFullpath, err := getSourcesFullpath(sources)
 	if err != nil {
@@ -168,7 +169,8 @@ func (compilerResult CompilerResult) ToDescWSourceMap() (DescriptionFile, error)
 
 	var sourceMap []string
 	for _, item := range outputs {
-		sourceMap = append(sourceMap, item.Src)
+		item := item.(map[string]interface{})
+		sourceMap = append(sourceMap, item["src"].(string))
 	}
 	res.SourceMap = sourceMap
 
@@ -281,9 +283,18 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 	if err != nil {
 		return res, err
 	}
-	resultsAsm, err := compilerWrapper.collectResultsAsm(outPathAsm)
-	if err != nil {
-		return res, err
+
+	var resultsAsm ResultsAsm
+	if compilerWrapper.Desc {
+		resultsAsm, err = compilerWrapper.collectResultsAsm(outPathAsm)
+		if err != nil {
+			return res, err
+		}
+	} else {
+		resultsAsm, err = compilerWrapper.collectResultsAsmSimple(outPathAsm)
+		if err != nil {
+			return res, err
+		}
 	}
 
 	compilerVersion, err := compilerWrapper.GetCompilerVersion()
@@ -347,18 +358,12 @@ func (compilerWrapper *CompilerWrapper) compile(source string, sourceFilePrefix 
 			}
 		}()
 
-		buf := new(bytes.Buffer)
-		encoder := json.NewEncoder(buf)
+		encoder := json.NewEncoder(f)
 
 		encoder.SetEscapeHTML(false)
 		encoder.SetIndent("", "  ")
 
 		err = encoder.Encode(desc)
-		if err != nil {
-			return res, err
-		}
-		descJSON := buf.String()
-		_, err = f.WriteString(descJSON)
 		if err != nil {
 			return res, err
 		}
@@ -508,19 +513,6 @@ func (compilerWrapper *CompilerWrapper) collectResultsAst(outPathAst string) (Re
 	}, nil
 }
 
-type Output struct {
-	Hex     string   `json:"hex"`
-	Src     string   `json:"src"`
-	Opcode  string   `json:"opcode"`
-	TopVars []string `json:"topVars"`
-}
-
-type AutoTypedVar struct {
-	Name string `json:"name"`
-	Src  string `json:"src"`
-	Type string `json:"type"`
-}
-
 type Position struct {
 	File      string `json:"file"`
 	Line      int    `json:"line"`
@@ -545,75 +537,34 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 
 	decoder := json.NewDecoder(fileAsm)
 
+	asmTree := make(map[string]interface{})
+
+	err = decoder.Decode(&asmTree)
+
+	if err != nil {
+		return res, err
+	}
+
 	var sources []string
-
-	decoder.Token()
-	decoder.Token()
-	decoder.Token()
-	for decoder.More() {
-
-		s, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-
-		sources = append(sources, s.(string))
+	for _, source := range asmTree["sources"].([]interface{}) {
+		sources = append(sources, source.(string))
 	}
 
 	sourcesFullpath, err := getSourcesFullpath(sources)
 	if err != nil {
 		return res, err
 	}
-	decoder.Token()
-	decoder.Token()
-	decoder.Token()
-	var outputs []Output
-	for decoder.More() {
 
-		var output Output
-		err = decoder.Decode(&output)
-		if err == io.EOF {
-			break
-		}
-
-		outputs = append(outputs, output)
-	}
-	decoder.Token()
-	decoder.Token()
-	decoder.Token()
-
-	var autovars []AutoTypedVar
-
-	for decoder.More() {
-
-		var autoTypedVar AutoTypedVar
-		err = decoder.Decode(&autoTypedVar)
-		if err == io.EOF {
-			break
-		}
-
-		autovars = append(autovars, autoTypedVar)
-	}
-
-	decoder.Token()
-	decoder.Token()
-	_, err = decoder.Token()
-
-	if err == nil || err.Error() != "EOF" {
-		return res, err
-	}
-
-	var asmTree map[string]interface{} = make(map[string]interface{})
 	var asmItems []map[string]interface{} = make([]map[string]interface{}, 0)
-	for _, output := range outputs {
-
+	for _, output := range asmTree["output"].([]interface{}) {
+		output := output.(map[string]interface{})
 		if !compilerWrapper.Debug {
-			opcode := output.Opcode
-			hex := output.Hex
+			opcode := output["opcode"].(string)
+			hex := output["hex"].(string)
 			asmItems = append(asmItems, map[string]interface{}{"opcode": opcode, "hex": hex})
 		}
 
-		match := reSubMatchMap(SOURCE_REGEXP, output.Src)
+		match := reSubMatchMap(SOURCE_REGEXP, output["src"].(string))
 		if len(match) > 0 {
 			fileIdx, err := strconv.Atoi(match["fileIndex"])
 			if err != nil {
@@ -664,8 +615,8 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 			}
 
 			asmItem := make(map[string]interface{})
-			asmItem["opcode"] = output.Opcode
-			asmItem["hex"] = output.Hex
+			asmItem["opcode"] = output["opcode"]
+			asmItem["hex"] = output["hex"]
 			asmItem["stack"] = ""
 			asmItem["pos"] = pos
 			asmItem["debugTag"] = debugTag
@@ -673,13 +624,11 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 		}
 	}
 
-	asmTree["sources"] = sources
-	asmTree["output"] = outputs
-
 	var autoTypedVars []map[string]interface{}
 	if compilerWrapper.Debug {
-		for _, item := range autovars {
-			match := reSubMatchMap(SOURCE_REGEXP, item.Src)
+		for _, item := range asmTree["autoTypedVars"].([]interface{}) {
+			item := item.(map[string]interface{})
+			match := reSubMatchMap(SOURCE_REGEXP, item["src"].(string))
 			if len(match) > 0 {
 				fileIdx, err := strconv.Atoi(match["fileIndex"])
 				if err != nil {
@@ -728,14 +677,8 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 
 				}
 
-				var a map[string]interface{} = map[string]interface{}{}
-
-				a["name"] = item.Name
-				a["pos"] = pos
-				a["type"] = item.Type
-
-				autoTypedVars = append(autoTypedVars, a)
-
+				item["pos"] = pos
+				autoTypedVars = append(autoTypedVars, item)
 			}
 		}
 	}
@@ -750,6 +693,49 @@ func (compilerWrapper *CompilerWrapper) collectResultsAsm(outPathAsm string) (Re
 
 		rawHexSb.WriteString(item["hex"].(string))
 	}
+
+	return ResultsAsm{
+		Asm:           asmItems,
+		AsmTree:       asmTree,
+		AutoTypedVars: autoTypedVars,
+		AsmRaw:        rawAsmSb.String(),
+		HexRaw:        rawHexSb.String(),
+	}, nil
+}
+
+func (compilerWrapper *CompilerWrapper) collectResultsAsmSimple(outPathAsm string) (ResultsAsm, error) {
+	var res ResultsAsm
+
+	fileAsm, err := os.Open(outPathAsm)
+	if err != nil {
+		return res, err
+	}
+
+	defer func() {
+		if err = fileAsm.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	decoder := json.NewDecoder(fileAsm)
+
+	asmTree := make(map[string]interface{})
+
+	err = decoder.Decode(&asmTree)
+
+	if err != nil {
+		return res, err
+	}
+
+	var rawHexSb strings.Builder
+	var rawAsmSb strings.Builder
+	var asmItems []map[string]interface{} = make([]map[string]interface{}, 0)
+	for _, output := range asmTree["output"].([]interface{}) {
+		output := output.(map[string]interface{})
+		rawHexSb.WriteString(output["hex"].(string))
+	}
+
+	var autoTypedVars []map[string]interface{}
 
 	return ResultsAsm{
 		Asm:           asmItems,
