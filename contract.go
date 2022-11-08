@@ -150,7 +150,7 @@ func (contract *Contract) SetPublicFunctionParams(functionName string, params ma
 
 		if typePlaceholder != typeActualParam {
 			errMsg := fmt.Sprintf("Passed value for param with name \"%s\" is not of the right type. Got \"%s\" but expected \"%s\"",
-				paramPlaceholder.Name, typeActualParam, typeActualParam)
+				paramPlaceholder.Name, typeActualParam, typePlaceholder)
 			return errors.New(errMsg)
 		}
 
