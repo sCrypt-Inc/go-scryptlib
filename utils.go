@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"reflect"
 	"regexp"
@@ -710,4 +712,22 @@ func DeduceActualType(t string, genericTypes map[string]string) string {
 	}
 
 	return t
+}
+
+func LoadDesc(file string) (DescriptionFile, error) {
+
+	var desc DescriptionFile
+	bytes, err := ioutil.ReadFile(file)
+
+	if err != nil {
+		return desc, err
+	}
+
+	err = json.Unmarshal(bytes, &desc)
+
+	if err != nil {
+		return desc, err
+	}
+
+	return desc, nil
 }

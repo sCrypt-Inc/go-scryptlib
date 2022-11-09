@@ -162,3 +162,34 @@ func Test_FactorizeArrayTypeString(t *testing.T) {
 	assert.Equal(t, arraySizes, []string{"2"})
 
 }
+
+func Test_LoadDesc(t *testing.T) {
+	desc, err := LoadDesc("desc/demo_desc.json")
+
+	assert.NoError(t, err)
+
+	contractDemo, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	x := Int{big.NewInt(7)}
+	y := Int{big.NewInt(4)}
+	constructorParams := map[string]ScryptType{
+		"x": x,
+		"y": y,
+	}
+
+	err = contractDemo.SetConstructorParams(constructorParams)
+	assert.NoError(t, err)
+
+	sumCorrect := Int{big.NewInt(11)}
+	addParams := map[string]ScryptType{
+		"z": sumCorrect,
+	}
+	err = contractDemo.SetPublicFunctionParams("add", addParams)
+	assert.NoError(t, err)
+
+	success, err := contractDemo.EvaluatePublicFunction("add")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+}

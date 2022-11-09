@@ -1075,7 +1075,7 @@ func findCompilerLocal(pathSuffix string) string {
 }
 
 func findCompilerPATH(pathSuffix string) string {
-	path, err := exec.LookPath("scryptc")
+	path, err := exec.LookPath("scrypt")
 	if err == nil {
 		return path
 	}
