@@ -53,6 +53,15 @@ func NewInt(val int64) Int {
 	return Int{big.NewInt(val)}
 }
 
+func NewIntFromStr(s string, base int) Int {
+	n := new(big.Int)
+	n, ok := n.SetString(s, base)
+	if !ok {
+		panic(fmt.Errorf("invalid number string \"%s\"", s))
+	}
+	return Int{n}
+}
+
 func (intType Int) Clone() ScryptType {
 	c := new(big.Int)
 	c = c.Set(intType.value)
@@ -206,6 +215,31 @@ func NewPrivKey(val *bec.PrivateKey) PrivKey {
 	return PrivKey{val}
 }
 
+func PrivKeyFromHex(h string) (PrivKey, error) {
+
+	data, err := hex.DecodeString(h)
+	if err != nil {
+		return NewPrivKey(nil), err
+	}
+
+	p, _ := bec.PrivKeyFromBytes(bec.S256(), data)
+
+	return NewPrivKey(p), nil
+}
+
+func (privKeyType PrivKey) toBigInt() *big.Int {
+
+	c := new(big.Int)
+	if privKeyType.value == nil {
+		c.SetInt64(0)
+		return c
+	}
+
+	b := privKeyType.value.Serialise()
+	c = c.SetBytes(b)
+	return c
+}
+
 func (privKeyType PrivKey) Hex() (string, error) {
 	b, err := privKeyType.Bytes()
 	if err != nil {
@@ -226,25 +260,9 @@ func (privKeyType PrivKey) Clone() ScryptType {
 	return PrivKey{priv}
 }
 
-func (privKeyType PrivKey) Bytes() ([]byte, error) {
-
-	if privKeyType.value == nil {
-		return []byte{0x00}, nil
-	}
-
-	var res []byte
-	b := privKeyType.value.Serialise()
-
-	for i := 0; i < len(b)/2; i++ {
-		b[i], b[len(b)-i-1] = b[len(b)-i-1], b[i]
-	}
-
-	pushDataPrefix, err := bscript.PushDataPrefix(b)
-	if err != nil {
-		return res, err
-	}
-
-	return append(pushDataPrefix, b...), nil
+func (privKey PrivKey) Bytes() ([]byte, error) {
+	n := Int{privKey.toBigInt()}
+	return n.Bytes()
 }
 
 func (privKeyType PrivKey) GetTypeString() string {

@@ -2158,3 +2158,35 @@ func TestContractGenericsst8(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, true, success)
 }
+
+func TestContractDecrypt(t *testing.T) {
+	compilerResult, err := compilerWrapper.CompileContractFile("./test/res/decrypt.scrypt")
+	assert.NoError(t, err)
+
+	desc, err := compilerResult.ToDescWSourceMap()
+	assert.NoError(t, err)
+
+	decrypt, err := NewContractFromDesc(desc)
+	assert.NoError(t, err)
+
+	point, err := decrypt.GetStructTypeTemplate("Point")
+	assert.NoError(t, err)
+
+	point.UpdateValue("x", NewIntFromStr("112480853479035711358537547598792536024104305348634273328347848512657823854047", 10))
+	point.UpdateValue("y", NewIntFromStr("7608050272491180713670563462900697273117387941835197652305163436291393634715", 10))
+
+	privKey, err := PrivKeyFromHex("c06b852b1f15414607be60e304ef6d0b74742929063971f2d0b1ad72d7a2d5f7")
+	assert.NoError(t, err)
+
+	unlockParams := map[string]ScryptType{
+		"privKey": privKey,
+		"K":       point,
+	}
+	err = decrypt.SetPublicFunctionParams("decrypt", unlockParams)
+	assert.NoError(t, err)
+
+	success, err := decrypt.EvaluatePublicFunction("decrypt")
+	assert.NoError(t, err)
+	assert.Equal(t, true, success)
+
+}
